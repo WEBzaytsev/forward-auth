@@ -254,7 +254,7 @@ func serveLoginPage(w http.ResponseWriter, redirectUrl string, errorMessage stri
     <div class="login-container">
         <h1>Здравствуйте!</h1> 
         <p class="subtitle">Введите PIN-код для входа</p>
-        <form method="POST">
+        <form method="POST" id="loginForm">
             %s 
             <div class="pin-input-container">
                 <input type="text" class="pin-digit-input" id="pin1" maxlength="1" pattern="[0-9]" inputmode="numeric">
@@ -269,32 +269,41 @@ func serveLoginPage(w http.ResponseWriter, redirectUrl string, errorMessage stri
     </div>
 
     <script>
-        const pinInputs = [document.getElementById('pin1'), document.getElementById('pin2'), document.getElementById('pin3'), document.getElementById('pin4')];
+        const pinInputs = [
+            document.getElementById('pin1'), 
+            document.getElementById('pin2'), 
+            document.getElementById('pin3'), 
+            document.getElementById('pin4')
+        ];
         const actualPasswordInput = document.getElementById('actualPasswordInput');
+        const loginForm = document.getElementById('loginForm');
 
         pinInputs.forEach((input, idx) => {
             input.addEventListener('input', (e) => {
                 let value = e.target.value;
                 if (value.match(/^[0-9]$/)) {
+                    updateActualPassword();
                     if (idx < pinInputs.length - 1) {
                         pinInputs[idx + 1].focus();
+                    } else {
+                        if (actualPasswordInput.value.length === pinInputs.length) {
+                            loginForm.submit();
+                        }
                     }
                 } else { 
                     e.target.value = ''; 
+                    updateActualPassword();
                 }
-                updateActualPassword();
             });
 
             input.addEventListener('keydown', (e) => {
                 if (e.key === 'Backspace') {
-                    if (input.value === '' && idx > 0) {
-                        pinInputs[idx - 1].focus();
-                        pinInputs[idx - 1].value = ''; 
-                    } else {
-                        setTimeout(() => {
-                            updateActualPassword();
-                        }, 0);
-                    }
+                    setTimeout(() => {
+                        updateActualPassword();
+                        if (input.value === '' && idx > 0) {
+                            pinInputs[idx - 1].focus();
+                        }
+                    }, 0);
                 }
             });
             
