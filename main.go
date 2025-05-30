@@ -111,7 +111,7 @@ func comprehensiveRootHandler(w http.ResponseWriter, r *http.Request) {
 		} else {
 			errorMessage := "Invalid password"
 			redirectURLFromForm := r.FormValue("redirect_url")
-			if redirectURLFromForm == "" {
+			if redirectURLFromForm == "" { 
 			    redirectURLFromForm = originalURL
 			}
 			serveLoginPage(w, redirectURLFromForm, errorMessage)
@@ -124,10 +124,69 @@ func comprehensiveRootHandler(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			return
 		} else {
-			w.Header().Set("Content-Type", "text/html")
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.Write([]byte(`<!DOCTYPE html>
-<html><head><meta charset="UTF-8"><title>Статус</title><style>body{font-family:-apple-system,system-ui,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;background:#f5f5f5}div{background:white;padding:2rem;border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,0.1);text-align:center}h1{margin-top:0}form{margin-top:1rem}button{width:100%;padding:0.5rem;font-size:1rem;background:#dc3545;color:white;border:none;border-radius:4px;cursor:pointer}button:hover{background:#c82333}</style></head>
-<body><div><h1>Авторизован</h1><form method="POST" action="/logout"><button type="submit">Выйти</button></form></div></body></html>`))
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Статус Авторизации</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #F6F7F8; /* Такой же фон, как у страницы логина */
+        }
+        .status-container {
+            background-color: #FFFFFF; /* Белый фон блока */
+            padding: 30px 40px;
+            border-radius: 20px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+            text-align: center;
+            width: 320px;
+        }
+        .status-container h1 {
+            font-size: 24px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 20px;
+        }
+        .status-container p {
+            font-size: 16px;
+            color: #555;
+            margin-bottom: 25px;
+        }
+        .status-container button {
+            width: 100%;
+            padding: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            background-color: #FF8C00; /* Оранжевая кнопка, как на логине */
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        .status-container button:hover {
+            background-color: #FFA500; /* Светлее при наведении */
+        }
+    </style>
+</head>
+<body>
+    <div class="status-container">
+        <h1>Авторизован</h1>
+        <p>Вы успешно вошли в систему.</p>
+        <form method="POST" action="/logout">
+            <button type="submit">Выйти</button>
+        </form>
+    </div>
+</body>
+</html>`))
 			return
 		}
 	}
