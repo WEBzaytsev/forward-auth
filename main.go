@@ -10,13 +10,35 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"net"
 )
 
 var (
-	password = getEnv("AUTH_PASSWORD", "1234")
-	secret = []byte(getEnv("SESSION_SECRET", "secret-key-32-bytes-long-minimum"))
-	authDomain = getEnv("AUTH_DOMAIN", "http://auth.zaitsv.dev")
+	password     = getEnv("AUTH_PASSWORD", "1234")
+	secret       = []byte(getEnv("SESSION_SECRET", "secret-key-32-bytes-long-minimum"))
+	authDomain   = getEnv("AUTH_DOMAIN", "http://auth.zaitsv.dev")
+	cookieDomain string
 )
+
+func init() {
+	parsedAuthURL, err := url.Parse(authDomain)
+	if err != nil {
+		cookieDomain = ""
+		return
+	}
+	hostname := parsedAuthURL.Hostname()
+
+	if hostname == "localhost" || net.ParseIP(hostname) != nil {
+		cookieDomain = hostname
+	} else {
+		parts := strings.Split(hostname, ".")
+		if len(parts) >= 2 {
+			cookieDomain = parts[len(parts)-2] + "." + parts[len(parts)-1]
+		} else {
+			cookieDomain = hostname
+		}
+	}
+}
 
 func main() {
 	http.HandleFunc("/", rootHandler)
@@ -171,14 +193,18 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 
 func logoutHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "POST" {
-		http.SetCookie(w, &http.Cookie{
+		cookieToExpire := http.Cookie{
 			Name:     "auth-token",
 			Value:    "",
 			Path:     "/",
-			MaxAge:   -1,
+			MaxAge:   -1, // Expire immediately
 			HttpOnly: true,
 			SameSite: http.SameSiteLaxMode,
-		})
+		}
+		if cookieDomain != "" { // Set domain if calculated
+			cookieToExpire.Domain = cookieDomain
+		}
+		http.SetCookie(w, &cookieToExpire)
 		http.Redirect(w, r, "/login", http.StatusFound)
 		return
 	}
@@ -190,14 +216,18 @@ func callbackHandler(w http.ResponseWriter, r *http.Request) {
 	redirect := r.URL.Query().Get("redirect")
 	
 	if validateToken(token) {
-		http.SetCookie(w, &http.Cookie{
+		cookieToSet := http.Cookie{
 			Name:     "auth-token",
 			Value:    token,
 			Path:     "/",
 			MaxAge:   86400 * 7,
 			HttpOnly: true,
 			SameSite: http.SameSiteLaxMode,
-		})
+		}
+		if cookieDomain != "" {
+			cookieToSet.Domain = cookieDomain
+		}
+		http.SetCookie(w, &cookieToSet)
 		
 		if redirect == "" {
 			redirect = "/"
