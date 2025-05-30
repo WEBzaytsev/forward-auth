@@ -1,14 +1,12 @@
-auth.zaitsv.dev {
-	reverse_proxy forward-auth:8080
+(secure) {
+	forward_auth forward-auth:8080 {
+		uri /
+	}
 }
 app-test.zaitsv.dev {
-	handle /callback {
-		reverse_proxy forward-auth:8080
-	}
-
-	forward_auth forward-auth:8080 {
-		uri /auth
-	}
-
 	respond "hello"
+	import secure
+}
+auth.zaitsv.dev {
+	reverse_proxy forward-auth:8080
 }

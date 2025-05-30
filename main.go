@@ -41,164 +41,131 @@ func init() {
 }
 
 func main() {
-	http.HandleFunc("/", rootHandler)
-	http.HandleFunc("/auth", authHandler)
-	http.HandleFunc("/login", loginHandler)
+	http.HandleFunc("/", comprehensiveRootHandler)
 	http.HandleFunc("/logout", logoutHandler)
-	http.HandleFunc("/callback", callbackHandler)
 	http.ListenAndServe(":8080", nil)
 }
 
-func rootHandler(w http.ResponseWriter, r *http.Request) {
-	http.Redirect(w, r, "/login", http.StatusFound)
-}
+func comprehensiveRootHandler(w http.ResponseWriter, r *http.Request) {
+	// Check for token from cookie first
+	token := ""
+	cookie, err := r.Cookie("auth-token")
+	if err == nil && cookie != nil {
+		token = cookie.Value
+	}
 
-func authHandler(w http.ResponseWriter, r *http.Request) {
-	token := r.Header.Get("X-Auth-Token")
+	// Try header if cookie is not found (less common for direct browser interaction, but good for API/programmatic checks)
 	if token == "" {
-		cookie, _ := r.Cookie("auth-token")
-		if cookie != nil {
-			token = cookie.Value
-		}
+		token = r.Header.Get("X-Auth-Token")
 	}
-	
-	if validateToken(token) {
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-	
-	originalURL := r.Header.Get("X-Original-URL")
-	if originalURL == "" {
-		originalURL = r.Header.Get("X-Forwarded-Proto") + "://" + r.Header.Get("X-Forwarded-Host") + r.Header.Get("X-Forwarded-Uri")
-	}
-	
-	loginURL := authDomain + "/login?redirect=" + url.QueryEscape(originalURL)
-	http.Redirect(w, r, loginURL, http.StatusFound)
-}
 
-func loginHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method == "GET" {
-		token := ""
-		cookie, err := r.Cookie("auth-token")
-		if err == nil && cookie != nil {
-			token = cookie.Value
-		}
-		if token == "" {
-			token = r.Header.Get("X-Auth-Token")
-		}
+	isTokenValid := validateToken(token)
 
-		if validateToken(token) {
-			w.Header().Set("Content-Type", "text/html")
-			w.Write([]byte(`<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Статус</title>
-    <style>
-        body { font-family: -apple-system, system-ui, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f5f5f5; }
-        div { background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); text-align: center; }
-        h1 { margin-top: 0; }
-        form { margin-top: 1rem; }
-        button { width: 100%; padding: 0.5rem; font-size: 1rem; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer; }
-        button:hover { background: #c82333; }
-    </style>
-</head>
-<body>
-    <div>
-        <h1>Авторизован</h1>
-        <form method="POST" action="/logout">
-            <button type="submit">Выйти</button>
-        </form>
-    </div>
-</body>
-</html>`))
-			return
+	// Determine the original URL the user was trying to access.
+	// This is important for redirecting after successful login.
+	originalURL := ""
+	if r.URL.Query().Get("redirect") != "" {
+		originalURL = r.URL.Query().Get("redirect")
+	} else if r.Header.Get("X-Forwarded-Uri") != "" { // Check headers from reverse proxy
+		scheme := r.Header.Get("X-Forwarded-Proto")
+		host := r.Header.Get("X-Forwarded-Host")
+		uri := r.Header.Get("X-Forwarded-Uri")
+		if scheme != "" && host != "" {
+			originalURL = scheme + "://" + host + uri
+		} else {
+			// Fallback or if it's a direct access to auth service without full proxy headers
+			parsedAuthDomain, _ := url.Parse(authDomain)
+			if parsedAuthDomain != nil {
+				originalURL = parsedAuthDomain.Scheme + "://" + parsedAuthDomain.Host + "/" // Default to auth domain root
+			}
 		}
-
-		w.Header().Set("Content-Type", "text/html")
-		w.Write([]byte(`<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Вход</title>
-    <style>
-        body { font-family: -apple-system, system-ui, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f5f5f5; }
-        form { background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        input { width: 200px; padding: 0.5rem; font-size: 1rem; border: 1px solid #ddd; border-radius: 4px; }
-        button { margin-top: 1rem; width: 100%; padding: 0.5rem; font-size: 1rem; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
-        button:hover { background: #0056b3; }
-    </style>
-</head>
-<body>
-    <form method="POST">
-        <input type="password" name="password" placeholder="Пароль" autofocus required>
-        <button type="submit">Войти</button>
-    </form>
-</body>
-</html>`))
+	} else {
+		// If no redirect param and no proxy headers, assume direct access to auth service root.
+		parsedAuthDomain, _ := url.Parse(authDomain)
+		if parsedAuthDomain != nil {
+			originalURL = parsedAuthDomain.Scheme + "://" + parsedAuthDomain.Host + "/"
+		} else {
+			originalURL = "/" // Absolute fallback
+		}
 	}
-	
+
 	if r.Method == "POST" {
 		r.ParseForm()
 		if r.FormValue("password") == password {
-			originalRedirect := r.URL.Query().Get("redirect")
-			
-			token := generateToken()
-			var callbackURL *url.URL
-			var finalRedirectURL string
+			newToken := generateToken()
+			cookieToSet := http.Cookie{
+				Name:     "auth-token",
+				Value:    newToken,
+				Path:     "/",
+				MaxAge:   86400 * 7,
+				HttpOnly: true,
+				SameSite: http.SameSiteLaxMode,
+			}
+			if cookieDomain != "" {
+				cookieToSet.Domain = cookieDomain
+			}
+			http.SetCookie(w, &cookieToSet)
 
-			// Попытка распарсить originalRedirect, чтобы понять, абсолютный ли он
-			parsedOriginalRedirect, err := url.Parse(originalRedirect)
-
-			if err == nil && parsedOriginalRedirect.IsAbs() {
-				// Если originalRedirect - абсолютный URL (например, https://app-test.zaitsv.dev/)
-				// Коллбэк должен быть на этом же хосте.
-				callbackURL = &url.URL{
-					Scheme: parsedOriginalRedirect.Scheme,
-					Host:   parsedOriginalRedirect.Host,
-					Path:   "/callback",
-				}
-				finalRedirectURL = originalRedirect // Конечный редирект - это и есть исходный URL
-			} else {
-				// Если originalRedirect относительный (например, "/") или отсутствует,
-				// или если это был прямой заход на auth.zaitsv.dev/login
-				// Коллбэк будет на authDomain.
-				parsedAuthDomain, authDomainErr := url.Parse(authDomain)
-				if (authDomainErr != nil) {
-					// Критическая ошибка, если не можем распарсить собственный authDomain
-					http.Error(w, "Internal server error: authDomain misconfiguration", http.StatusInternalServerError)
-					return
-				}
-				callbackURL = &url.URL{
-					Scheme: parsedAuthDomain.Scheme,
-					Host:   parsedAuthDomain.Host,
-					Path:   "/callback",
-				}
-				// Формируем конечный URL для редиректа. 
-				// Если originalRedirect был пустым или "/", редиректим на корень authDomain.
-				// Иначе, пытаемся скомбинировать authDomain с относительным путем из originalRedirect.
-				if originalRedirect == "" || originalRedirect == "/" {
-					finalRedirectURL = parsedAuthDomain.Scheme + "://" + parsedAuthDomain.Host + "/"
-				} else {
-					// Пытаемся разрешить originalRedirect относительно authDomain
-					// Это полезно, если originalRedirect был, например, "/some/path"
-					resolvedRedirect := parsedAuthDomain.ResolveReference(&url.URL{Path: originalRedirect})
-					finalRedirectURL = resolvedRedirect.String()
+			// Redirect to the original URL after successful login
+			// The 'originalURL' was submitted as a hidden field from the GET request's form
+			postRedirectURL := r.FormValue("redirect_url")
+			if postRedirectURL == "" { // Fallback if hidden field was missing
+				postRedirectURL = "/"
+				parsedAuthDomain, _ := url.Parse(authDomain)
+				if parsedAuthDomain != nil {
+					postRedirectURL = parsedAuthDomain.Scheme + "://" + parsedAuthDomain.Host + "/"
 				}
 			}
-
-			query := callbackURL.Query()
-			query.Set("token", token)
-			query.Set("redirect", finalRedirectURL) // всегда используем finalRedirectURL как значение для 'redirect' в callback
-			callbackURL.RawQuery = query.Encode()
-			
-			http.Redirect(w, r, callbackURL.String(), http.StatusFound)
+			http.Redirect(w, r, postRedirectURL, http.StatusFound)
+			return
+		} else {
+			// Password incorrect - Show login form again with an error message
+			// We need to pass the originalURL again to the template/form
+			errorMessage := "Invalid password"
+			serveLoginPage(w, originalURL, errorMessage)
 			return
 		}
-		http.Redirect(w, r, r.URL.String(), http.StatusFound)
 	}
+
+	// GET Request Logic from here
+	if isTokenValid {
+		// If X-Forwarded-Uri is present, it's likely an auth check from Caddy's forward_auth
+		if r.Header.Get("X-Forwarded-Uri") != "" {
+			w.WriteHeader(http.StatusOK)
+			return
+		} else {
+			// Direct access to the auth service by an already authenticated user
+			w.Header().Set("Content-Type", "text/html")
+			w.Write([]byte(`<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>Статус</title><style>body{font-family:-apple-system,system-ui,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;background:#f5f5f5}div{background:white;padding:2rem;border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,0.1);text-align:center}h1{margin-top:0}form{margin-top:1rem}button{width:100%;padding:0.5rem;font-size:1rem;background:#dc3545;color:white;border:none;border-radius:4px;cursor:pointer}button:hover{background:#c82333}</style></head>
+<body><div><h1>Авторизован</h1><form method="POST" action="/logout"><button type="submit">Выйти</button></form></div></body></html>`))
+			return
+		}
+	}
+
+	// If token is not valid or not present, and it's a GET request, show login page
+	serveLoginPage(w, originalURL, "") // No error message initially
+}
+
+// Helper function to serve the login page HTML
+func serveLoginPage(w http.ResponseWriter, redirectUrl string, errorMessage string) {
+	w.Header().Set("Content-Type", "text/html")
+	// Basic error display, can be improved
+	errorHTML := ""
+	if errorMessage != "" {
+		errorHTML = "<p style='color:red;'>" + errorMessage + "</p>"
+	}
+
+	// Ensure redirectUrl is properly escaped if it's going into an HTML attribute like value
+	htmlEscapedRedirectUrl := strings.ReplaceAll(redirectUrl, "\"", "&quot;") // Basic escaping for value attribute
+
+	w.Write([]byte(`<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Вход</title>
+<style>body{font-family:-apple-system,system-ui,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#f5f5f5}form{background:white;padding:2rem;border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,0.1)}input[type=password]{width:200px;padding:0.5rem;font-size:1rem;border:1px solid #ddd;border-radius:4px;margin-bottom:0.5rem}input[type=hidden]{display:none}button{margin-top:1rem;width:100%;padding:0.5rem;font-size:1rem;background:#007bff;color:white;border:none;border-radius:4px;cursor:pointer}button:hover{background:#0056b3}</style></head>
+<body><form method="POST">` + errorHTML + 
+`<input type="password" name="password" placeholder="Пароль" autofocus required>
+<input type="hidden" name="redirect_url" value="` + htmlEscapedRedirectUrl + `">
+<button type="submit">Войти</button></form></body></html>`))
 }
 
 func logoutHandler(w http.ResponseWriter, r *http.Request) {
@@ -207,46 +174,18 @@ func logoutHandler(w http.ResponseWriter, r *http.Request) {
 			Name:     "auth-token",
 			Value:    "",
 			Path:     "/",
-			MaxAge:   -1, // Expire immediately
-			HttpOnly: true,
-			SameSite: http.SameSiteLaxMode,
-		}
-		if cookieDomain != "" { // Set domain if calculated
-			cookieToExpire.Domain = cookieDomain
-		}
-		http.SetCookie(w, &cookieToExpire)
-		http.Redirect(w, r, "/login", http.StatusFound)
-		return
-	}
-	http.Redirect(w, r, "/login", http.StatusMethodNotAllowed)
-}
-
-func callbackHandler(w http.ResponseWriter, r *http.Request) {
-	token := r.URL.Query().Get("token")
-	redirect := r.URL.Query().Get("redirect")
-	
-	if validateToken(token) {
-		cookieToSet := http.Cookie{
-			Name:     "auth-token",
-			Value:    token,
-			Path:     "/",
-			MaxAge:   86400 * 7,
+			MaxAge:   -1,
 			HttpOnly: true,
 			SameSite: http.SameSiteLaxMode,
 		}
 		if cookieDomain != "" {
-			cookieToSet.Domain = cookieDomain
+			cookieToExpire.Domain = cookieDomain
 		}
-		http.SetCookie(w, &cookieToSet)
-		
-		if redirect == "" {
-			redirect = "/"
-		}
-		http.Redirect(w, r, redirect, http.StatusFound)
+		http.SetCookie(w, &cookieToExpire)
+		http.Redirect(w, r, "/", http.StatusFound)
 		return
 	}
-	
-	http.Error(w, "Invalid token", http.StatusUnauthorized)
+	http.Redirect(w, r, "/", http.StatusMethodNotAllowed)
 }
 
 func generateToken() string {
