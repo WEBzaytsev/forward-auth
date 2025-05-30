@@ -334,7 +334,7 @@ func serveLoginPage(w http.ResponseWriter, redirectUrl string, errorMessage stri
         }
     </script>
 </body>
-</html>`, errorHTML, htmlEscapedRedirectUrl))))
+</html>`, errorHTML, htmlEscapedRedirectUrl)))
 }
 
 func logoutHandler(w http.ResponseWriter, r *http.Request) {
