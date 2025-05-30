@@ -60,7 +60,7 @@ jobs:
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.SERVER_IP_FRONT }}
-          username: ${{ secrets.SERVER_USER_FRONT }}
+          username: root
           port: 2114
           key: ${{ secrets.SSH_PRIVATE_KEY_FRONT }}
           script: |
