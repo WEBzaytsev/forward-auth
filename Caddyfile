@@ -9,7 +9,7 @@ auth.example.com {
 }
 
 www.example.com {
-	reverse_proxy 127.0.0.1:8080
+	respond "hello www.example.com"
 	forward_auth forward-auth:8080 {
 		uri /
 	}
