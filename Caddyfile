@@ -1,5 +1,5 @@
 auth.example.com {
-	reverse_proxy forward-auth:3000
+	reverse_proxy forward-auth:8080
 }
 app.example.com {
 	handle /callback {
