@@ -1,0 +1,3 @@
+forward-auth
+*.exe
+.env 

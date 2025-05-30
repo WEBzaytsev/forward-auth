@@ -1,0 +1,25 @@
+version: '3'
+
+services:
+  forward-auth:
+    build: .
+    environment:
+      - AUTH_PASSWORD=1234
+      - SESSION_SECRET=your-secret-key-32-bytes-minimum
+      - AUTH_DOMAIN=http://auth.zaitsv.dev
+    ports:
+      - "8080:8080"
+
+  caddy:
+    image: caddy:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config: 

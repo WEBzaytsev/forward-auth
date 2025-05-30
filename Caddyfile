@@ -1,0 +1,14 @@
+app.example.com {
+    handle /callback {
+        reverse_proxy forward-auth:8080
+    }
+    
+    handle {
+        forward_auth forward-auth:8080 {
+            uri /auth
+            copy_headers X-Auth-URL
+        }
+        
+        reverse_proxy your-app:3000
+    }
+} 
