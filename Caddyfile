@@ -1,16 +1,16 @@
 app.example.com {
-	respond "hello"
 	forward_auth forward-auth:8080 {
 		uri /
 	}
+	respond "hello"
 }
 auth.example.com {
 	reverse_proxy forward-auth:8080
 }
 
 www.example.com {
-	respond "hello www.example.com"
 	forward_auth forward-auth:8080 {
 		uri /
 	}
+	respond "hello www.example.com"
 }

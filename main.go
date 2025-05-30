@@ -4,6 +4,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
+	"fmt"
 	"net/http"
 	"net/url"
 	"os"
@@ -153,21 +154,135 @@ func comprehensiveRootHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func serveLoginPage(w http.ResponseWriter, redirectUrl string, errorMessage string) {
-	w.Header().Set("Content-Type", "text/html")
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	errorHTML := ""
 	if errorMessage != "" {
-		errorHTML = "<p style='color:red;'>" + errorMessage + "</p>"
+		errorHTML = "<p class=\"error-message\">" + errorMessage + "</p>"
 	}
 
 	htmlEscapedRedirectUrl := strings.ReplaceAll(redirectUrl, "\"", "&quot;")
 
-	w.Write([]byte(`<!DOCTYPE html>
-<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Вход</title>
-<style>body{font-family:-apple-system,system-ui,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#f5f5f5}form{background:white;padding:2rem;border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,0.1)}input[type=password]{width:200px;padding:0.5rem;font-size:1rem;border:1px solid #ddd;border-radius:4px;margin-bottom:0.5rem}input[type=hidden]{display:none}button{margin-top:1rem;width:100%;padding:0.5rem;font-size:1rem;background:#007bff;color:white;border:none;border-radius:4px;cursor:pointer}button:hover{background:#0056b3}</style></head>
-<body><form method="POST">` + errorHTML + 
-`<input type="password" name="password" placeholder="Пароль" autofocus required>
-<input type="hidden" name="redirect_url" value="` + htmlEscapedRedirectUrl + `">
-<button type="submit">Войти</button></form></body></html>`))
+	w.Write([]byte(fmt.Sprintf(`<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Вход</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #FFDAB9;
+        }
+        .login-container {
+            background-color: rgba(255, 228, 196, 0.8);
+            padding: 30px 40px;
+            border-radius: 20px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+            text-align: center;
+            width: 320px;
+        }
+        .avatar {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background-color: #ccc;
+            margin: 0 auto 20px auto;
+            overflow: hidden;
+        }
+        .avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        h1 {
+            font-size: 24px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 10px;
+        }
+        p.subtitle {
+            font-size: 14px;
+            color: #555;
+            margin-bottom: 25px;
+        }
+        .pin-code-inputs {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 25px;
+        }
+        input[type="password"] {
+            width: 100%%;
+            padding: 12px;
+            font-size: 16px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            box-sizing: border-box;
+            text-align: center;
+            margin-bottom: 15px;
+        }
+        input[type="hidden"] { display: none; }
+        button[type="submit"] {
+            width: 100%%;
+            padding: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            background-color: #FF8C00;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        button[type="submit"]:hover {
+            background-color: #FFA500;
+        }
+        .links {
+            margin-top: 20px;
+            font-size: 13px;
+        }
+        .links a {
+            color: #555;
+            text-decoration: none;
+            margin: 0 10px;
+        }
+        .links a:hover {
+            text-decoration: underline;
+        }
+        .error-message {
+            color: #D8000C;
+            background-color: #FFD2D2;
+            border: 1px solid #D8000C;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="avatar">
+        </div>
+        <h1>Здравствуйте, Никита!</h1>
+        <p class="subtitle">Введите пароль для входа</p>
+        <form method="POST">
+            %s
+            <input type="password" name="password" placeholder="••••" autofocus required>
+            <input type="hidden" name="redirect_url" value="%s">
+            <button type="submit">Войти</button>
+        </form>
+        <div class="links">
+            <a href="#">Не помню код</a>
+            <a href="#">Я не Никита</a>
+        </div>
+    </div>
+</body>
+</html>`, errorHTML, htmlEscapedRedirectUrl)))
 }
 
 func logoutHandler(w http.ResponseWriter, r *http.Request) {
