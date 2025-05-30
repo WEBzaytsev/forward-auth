@@ -1,9 +1,16 @@
 app-test.zaitsv.dev {
 	respond "hello"
-		forward_auth forward-auth:8080 {
+	forward_auth forward-auth:8080 {
 		uri /
 	}
 }
 auth.zaitsv.dev {
 	reverse_proxy forward-auth:8080
+}
+
+webzaitsv.ru {
+	reverse_proxy 127.0.0.1:8080
+	forward_auth forward-auth:8080 {
+		uri /
+	}
 }
