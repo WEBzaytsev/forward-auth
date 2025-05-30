@@ -143,48 +143,58 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "POST" {
 		r.ParseForm()
 		if r.FormValue("password") == password {
-			redirect := r.URL.Query().Get("redirect")
+			originalRedirect := r.URL.Query().Get("redirect")
 			
 			token := generateToken()
-			var callbackURLString string
+			var callbackURL *url.URL
+			var finalRedirectURL string
 
-			// Try to parse the redirect URL to determine if it's absolute
-			parsedRedirectURL, err := url.Parse(redirect)
-			if err == nil && parsedRedirectURL.IsAbs() {
-				// If redirect is an absolute URL, construct callback for that specific host
-				callbackURL := &url.URL{
-					Scheme:   parsedRedirectURL.Scheme,
-					Host:     parsedRedirectURL.Host,
-					Path:     "/callback",
+			// Попытка распарсить originalRedirect, чтобы понять, абсолютный ли он
+			parsedOriginalRedirect, err := url.Parse(originalRedirect)
+
+			if err == nil && parsedOriginalRedirect.IsAbs() {
+				// Если originalRedirect - абсолютный URL (например, https://app-test.zaitsv.dev/)
+				// Коллбэк должен быть на этом же хосте.
+				callbackURL = &url.URL{
+					Scheme: parsedOriginalRedirect.Scheme,
+					Host:   parsedOriginalRedirect.Host,
+					Path:   "/callback",
 				}
-				q := callbackURL.Query()
-				q.Set("token", token)
-				q.Set("redirect", redirect) // redirect back to original full URL
-				callbackURL.RawQuery = q.Encode()
-				callbackURLString = callbackURL.String()
+				finalRedirectURL = originalRedirect // Конечный редирект - это и есть исходный URL
 			} else {
-				// If redirect is relative or parsing failed, use authDomain for callback
-				if redirect == "" {
-					redirect = "/" // Default redirect to root of authDomain if not specified
+				// Если originalRedirect относительный (например, "/") или отсутствует,
+				// или если это был прямой заход на auth.zaitsv.dev/login
+				// Коллбэк будет на authDomain.
+				parsedAuthDomain, authDomainErr := url.Parse(authDomain)
+				if (authDomainErr != nil) {
+					// Критическая ошибка, если не можем распарсить собственный authDomain
+					http.Error(w, "Internal server error: authDomain misconfiguration", http.StatusInternalServerError)
+					return
 				}
-				callbackURL := &url.URL{
-					Scheme:   "", // Will be inherited from authDomain
-					Host:     "", // Will be inherited from authDomain
-					Path:     authDomain + "/callback",
+				callbackURL = &url.URL{
+					Scheme: parsedAuthDomain.Scheme,
+					Host:   parsedAuthDomain.Host,
+					Path:   "/callback",
 				}
-				parsedAuthDomainURL, _ := url.Parse(authDomain)
-				if parsedAuthDomainURL != nil {
-					callbackURL.Scheme = parsedAuthDomainURL.Scheme
-					callbackURL.Host = parsedAuthDomainURL.Host
+				// Формируем конечный URL для редиректа. 
+				// Если originalRedirect был пустым или "/", редиректим на корень authDomain.
+				// Иначе, пытаемся скомбинировать authDomain с относительным путем из originalRedirect.
+				if originalRedirect == "" || originalRedirect == "/" {
+					finalRedirectURL = parsedAuthDomain.Scheme + "://" + parsedAuthDomain.Host + "/"
+				} else {
+					// Пытаемся разрешить originalRedirect относительно authDomain
+					// Это полезно, если originalRedirect был, например, "/some/path"
+					resolvedRedirect := parsedAuthDomain.ResolveReference(&url.URL{Path: originalRedirect})
+					finalRedirectURL = resolvedRedirect.String()
 				}
-				q := callbackURL.Query()
-				q.Set("token", token)
-				q.Set("redirect", url.QueryEscape(redirect)) // redirect back to original path on original domain
-				callbackURL.RawQuery = q.Encode()
-				callbackURLString = callbackURL.String()
 			}
+
+			query := callbackURL.Query()
+			query.Set("token", token)
+			query.Set("redirect", finalRedirectURL) // всегда используем finalRedirectURL как значение для 'redirect' в callback
+			callbackURL.RawQuery = query.Encode()
 			
-			http.Redirect(w, r, callbackURLString, http.StatusFound)
+			http.Redirect(w, r, callbackURL.String(), http.StatusFound)
 			return
 		}
 		http.Redirect(w, r, r.URL.String(), http.StatusFound)
