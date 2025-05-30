@@ -19,10 +19,16 @@ var (
 )
 
 func main() {
+	http.HandleFunc("/", rootHandler)
 	http.HandleFunc("/auth", authHandler)
 	http.HandleFunc("/login", loginHandler)
+	http.HandleFunc("/logout", logoutHandler)
 	http.HandleFunc("/callback", callbackHandler)
 	http.ListenAndServe(":8080", nil)
+}
+
+func rootHandler(w http.ResponseWriter, r *http.Request) {
+	http.Redirect(w, r, "/login", http.StatusFound)
 }
 
 func authHandler(w http.ResponseWriter, r *http.Request) {
@@ -50,6 +56,44 @@ func authHandler(w http.ResponseWriter, r *http.Request) {
 
 func loginHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "GET" {
+		token := ""
+		cookie, err := r.Cookie("auth-token")
+		if err == nil && cookie != nil {
+			token = cookie.Value
+		}
+		if token == "" {
+			token = r.Header.Get("X-Auth-Token")
+		}
+
+		if validateToken(token) {
+			w.Header().Set("Content-Type", "text/html")
+			w.Write([]byte(`<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Статус</title>
+    <style>
+        body { font-family: -apple-system, system-ui, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f5f5f5; }
+        div { background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); text-align: center; }
+        h1 { margin-top: 0; }
+        form { margin-top: 1rem; }
+        button { width: 100%; padding: 0.5rem; font-size: 1rem; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #c82333; }
+    </style>
+</head>
+<body>
+    <div>
+        <h1>Авторизован</h1>
+        <form method="POST" action="/logout">
+            <button type="submit">Выйти</button>
+        </form>
+    </div>
+</body>
+</html>`))
+			return
+		}
+
 		w.Header().Set("Content-Type", "text/html")
 		w.Write([]byte(`<!DOCTYPE html>
 <html>
@@ -72,7 +116,6 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
     </form>
 </body>
 </html>`))
-		return
 	}
 	
 	if r.Method == "POST" {
@@ -124,6 +167,22 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		http.Redirect(w, r, r.URL.String(), http.StatusFound)
 	}
+}
+
+func logoutHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method == "POST" {
+		http.SetCookie(w, &http.Cookie{
+			Name:     "auth-token",
+			Value:    "",
+			Path:     "/",
+			MaxAge:   -1,
+			HttpOnly: true,
+			SameSite: http.SameSiteLaxMode,
+		})
+		http.Redirect(w, r, "/login", http.StatusFound)
+		return
+	}
+	http.Redirect(w, r, "/login", http.StatusMethodNotAllowed)
 }
 
 func callbackHandler(w http.ResponseWriter, r *http.Request) {
