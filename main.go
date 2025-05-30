@@ -47,45 +47,37 @@ func main() {
 }
 
 func comprehensiveRootHandler(w http.ResponseWriter, r *http.Request) {
-	// Check for token from cookie first
 	token := ""
 	cookie, err := r.Cookie("auth-token")
 	if err == nil && cookie != nil {
 		token = cookie.Value
 	}
-
-	// Try header if cookie is not found (less common for direct browser interaction, but good for API/programmatic checks)
 	if token == "" {
 		token = r.Header.Get("X-Auth-Token")
 	}
-
 	isTokenValid := validateToken(token)
 
-	// Determine the original URL the user was trying to access.
-	// This is important for redirecting after successful login.
 	originalURL := ""
 	if r.URL.Query().Get("redirect") != "" {
 		originalURL = r.URL.Query().Get("redirect")
-	} else if r.Header.Get("X-Forwarded-Uri") != "" { // Check headers from reverse proxy
+	} else if r.Header.Get("X-Forwarded-Uri") != "" { 
 		scheme := r.Header.Get("X-Forwarded-Proto")
 		host := r.Header.Get("X-Forwarded-Host")
 		uri := r.Header.Get("X-Forwarded-Uri")
 		if scheme != "" && host != "" {
 			originalURL = scheme + "://" + host + uri
 		} else {
-			// Fallback or if it's a direct access to auth service without full proxy headers
 			parsedAuthDomain, _ := url.Parse(authDomain)
 			if parsedAuthDomain != nil {
-				originalURL = parsedAuthDomain.Scheme + "://" + parsedAuthDomain.Host + "/" // Default to auth domain root
+				originalURL = parsedAuthDomain.Scheme + "://" + parsedAuthDomain.Host + "/"
 			}
 		}
 	} else {
-		// If no redirect param and no proxy headers, assume direct access to auth service root.
 		parsedAuthDomain, _ := url.Parse(authDomain)
 		if parsedAuthDomain != nil {
 			originalURL = parsedAuthDomain.Scheme + "://" + parsedAuthDomain.Host + "/"
 		} else {
-			originalURL = "/" // Absolute fallback
+			originalURL = "/"
 		}
 	}
 
@@ -105,11 +97,8 @@ func comprehensiveRootHandler(w http.ResponseWriter, r *http.Request) {
 				cookieToSet.Domain = cookieDomain
 			}
 			http.SetCookie(w, &cookieToSet)
-
-			// Redirect to the original URL after successful login
-			// The 'originalURL' was submitted as a hidden field from the GET request's form
 			postRedirectURL := r.FormValue("redirect_url")
-			if postRedirectURL == "" { // Fallback if hidden field was missing
+			if postRedirectURL == "" { 
 				postRedirectURL = "/"
 				parsedAuthDomain, _ := url.Parse(authDomain)
 				if parsedAuthDomain != nil {
@@ -119,22 +108,21 @@ func comprehensiveRootHandler(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, postRedirectURL, http.StatusFound)
 			return
 		} else {
-			// Password incorrect - Show login form again with an error message
-			// We need to pass the originalURL again to the template/form
 			errorMessage := "Invalid password"
-			serveLoginPage(w, originalURL, errorMessage)
+			redirectURLFromForm := r.FormValue("redirect_url")
+			if redirectURLFromForm == "" {
+			    redirectURLFromForm = originalURL
+			}
+			serveLoginPage(w, redirectURLFromForm, errorMessage)
 			return
 		}
 	}
 
-	// GET Request Logic from here
 	if isTokenValid {
-		// If X-Forwarded-Uri is present, it's likely an auth check from Caddy's forward_auth
 		if r.Header.Get("X-Forwarded-Uri") != "" {
 			w.WriteHeader(http.StatusOK)
 			return
 		} else {
-			// Direct access to the auth service by an already authenticated user
 			w.Header().Set("Content-Type", "text/html")
 			w.Write([]byte(`<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><title>Статус</title><style>body{font-family:-apple-system,system-ui,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;background:#f5f5f5}div{background:white;padding:2rem;border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,0.1);text-align:center}h1{margin-top:0}form{margin-top:1rem}button{width:100%;padding:0.5rem;font-size:1rem;background:#dc3545;color:white;border:none;border-radius:4px;cursor:pointer}button:hover{background:#c82333}</style></head>
@@ -143,21 +131,35 @@ func comprehensiveRootHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// If token is not valid or not present, and it's a GET request, show login page
-	serveLoginPage(w, originalURL, "") // No error message initially
+	parsedAuthURL, _ := url.Parse(authDomain)
+	isOnAuthDomainRoot := false
+	if parsedAuthURL != nil && r.Host == parsedAuthURL.Host && r.URL.Path == "/" {
+		isOnAuthDomainRoot = true
+	}
+
+	if isOnAuthDomainRoot {
+		serveLoginPage(w, originalURL, "") 
+	} else if r.Header.Get("X-Forwarded-Uri") != "" && (parsedAuthURL == nil || r.Host != parsedAuthURL.Host) {
+		loginRedirectURL := authDomain + "/?redirect=" + url.QueryEscape(originalURL)
+		http.Redirect(w, r, loginRedirectURL, http.StatusFound)
+	} else {
+		if parsedAuthURL != nil && strings.HasPrefix(originalURL, authDomain) {
+		    serveLoginPage(w, originalURL, "")
+		} else {
+		    loginRedirectURL := authDomain + "/?redirect=" + url.QueryEscape(originalURL)
+		    http.Redirect(w, r, loginRedirectURL, http.StatusFound)
+		}
+	}
 }
 
-// Helper function to serve the login page HTML
 func serveLoginPage(w http.ResponseWriter, redirectUrl string, errorMessage string) {
 	w.Header().Set("Content-Type", "text/html")
-	// Basic error display, can be improved
 	errorHTML := ""
 	if errorMessage != "" {
 		errorHTML = "<p style='color:red;'>" + errorMessage + "</p>"
 	}
 
-	// Ensure redirectUrl is properly escaped if it's going into an HTML attribute like value
-	htmlEscapedRedirectUrl := strings.ReplaceAll(redirectUrl, "\"", "&quot;") // Basic escaping for value attribute
+	htmlEscapedRedirectUrl := strings.ReplaceAll(redirectUrl, "\"", "&quot;")
 
 	w.Write([]byte(`<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Вход</title>

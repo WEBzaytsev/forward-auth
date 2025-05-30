@@ -1,11 +1,8 @@
-(secure) {
-	forward_auth forward-auth:8080 {
-		uri /
-	}
-}
 app-test.zaitsv.dev {
 	respond "hello"
-	import secure
+		forward_auth forward-auth:8080 {
+		uri /
+	}
 }
 auth.zaitsv.dev {
 	reverse_proxy forward-auth:8080
