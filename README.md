@@ -25,19 +25,3 @@ docker-compose up -d
 
 См. `Caddyfile`
 
-## Использование с Nginx  
-
-См. `nginx.conf`
-
-## GitHub Actions
-
-### GitHub Container Registry (ghcr.io)
-
-Используйте `.github/workflows/docker.yml` - работает автоматически с GITHUB_TOKEN.
-
-### Приватный Docker Registry
-
-Используйте `.github/workflows/docker-private.yml` и настройте секреты:
-- `DOCKER_REGISTRY` - адрес вашего registry
-- `DOCKER_USERNAME` - логин
-- `DOCKER_PASSWORD` - пароль или токен 
