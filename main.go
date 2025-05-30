@@ -176,15 +176,15 @@ func serveLoginPage(w http.ResponseWriter, redirectUrl string, errorMessage stri
             justify-content: center;
             min-height: 100vh;
             margin: 0;
-            background-color: #FFDAB9;
+            background-color: #F6F7F8; /* Новый фон страницы */
         }
         .login-container {
-            background-color: rgba(255, 228, 196, 0.8);
+            background-color: #FFFFFF; /* Новый фон блока с формой */
             padding: 30px 40px;
             border-radius: 20px;
             box-shadow: 0 8px 20px rgba(0,0,0,0.1);
             text-align: center;
-            width: 340px; /* Немного шире для 4х инпутов */
+            width: 340px; 
         }
         h1 {
             font-size: 24px;
@@ -199,31 +199,29 @@ func serveLoginPage(w http.ResponseWriter, redirectUrl string, errorMessage stri
         }
         .pin-input-container {
             display: flex;
-            justify-content: center; /* Распределяем инпуты по центру */
-            gap: 10px; /* Промежуток между инпутами */
+            justify-content: center; 
+            gap: 10px; 
             margin-bottom: 25px;
         }
         .pin-digit-input {
-            width: 50px;  /* Ширина каждого блока */
-            height: 60px; /* Высота каждого блока */
+            width: 50px;  
+            height: 60px; 
             font-size: 24px;
             text-align: center;
             border: 1px solid #ddd;
-            border-radius: 10px; /* Скругление углов */
+            border-radius: 10px; 
             box-sizing: border-box;
-            caret-color: transparent; /* Скрываем курсор, если точка уже есть */
+            caret-color: transparent; 
         }
         .pin-digit-input:focus {
-            border-color: #FF8C00; /* Оранжевая рамка при фокусе */
+            border-color: #FF8C00; 
             outline: none;
             box-shadow: 0 0 5px rgba(255, 140, 0, 0.5);
         }
-        /* Стилизация для заполненного поля, похожего на точку */
         .pin-digit-input.filled {
-            font-size: 30px; /* Размер точки */
-            line-height: 60px; /* Вертикальное выравнивание точки */
+            font-size: 30px; 
+            line-height: 60px; 
         }
-
         input[type="hidden"] { display: none; }
         button[type="submit"] {
             width: 100%%;
@@ -264,7 +262,7 @@ func serveLoginPage(w http.ResponseWriter, redirectUrl string, errorMessage stri
                 <input type="text" class="pin-digit-input" id="pin3" maxlength="1" pattern="[0-9]" inputmode="numeric">
                 <input type="text" class="pin-digit-input" id="pin4" maxlength="1" pattern="[0-9]" inputmode="numeric">
             </div>
-            <input type="hidden" name="password" id="actualPasswordInput"> <!-- Сюда JS будет класть PIN -->
+            <input type="hidden" name="password" id="actualPasswordInput">
             <input type="hidden" name="redirect_url" value="%s">
             <button type="submit">Войти</button>
         </form>
@@ -277,16 +275,12 @@ func serveLoginPage(w http.ResponseWriter, redirectUrl string, errorMessage stri
         pinInputs.forEach((input, idx) => {
             input.addEventListener('input', (e) => {
                 let value = e.target.value;
-                if (value.match(/^[0-9]$/)) { // Если введена цифра
-                    // Вместо цифры показать точку (или оставить цифру, если так нужно)
-                    // e.target.value = '●'; // Если хотим маскировать сразу точкой
-                    // e.target.classList.add('filled');
+                if (value.match(/^[0-9]$/)) {
                     if (idx < pinInputs.length - 1) {
                         pinInputs[idx + 1].focus();
                     }
-                } else { // Если введено что-то не то (или пусто)
-                    e.target.value = ''; // Очистить, если не цифра
-                    // e.target.classList.remove('filled');
+                } else { 
+                    e.target.value = ''; 
                 }
                 updateActualPassword();
             });
@@ -294,23 +288,16 @@ func serveLoginPage(w http.ResponseWriter, redirectUrl string, errorMessage stri
             input.addEventListener('keydown', (e) => {
                 if (e.key === 'Backspace') {
                     if (input.value === '' && idx > 0) {
-                        // Если поле уже пустое и это не первое поле, перейти к предыдущему
                         pinInputs[idx - 1].focus();
-                        pinInputs[idx - 1].value = ''; // Очищаем предыдущее для повторного ввода
-                        // pinInputs[idx - 1].classList.remove('filled');
+                        pinInputs[idx - 1].value = ''; 
                     } else {
-                        // Если поле не пустое, Backspace его очистит. 
-                        // 'input' событие после этого не всегда надежно на некоторых браузерах для Backspace,
-                        // поэтому можно добавить небольшую задержку для обновления.
                         setTimeout(() => {
-                            // input.classList.remove('filled');
                             updateActualPassword();
                         }, 0);
                     }
                 }
             });
             
-            // Предотвращаем ввод нечисловых символов, если pattern и inputmode не сработали
             input.addEventListener('keypress', (e) => {
                 if (!e.key.match(/^[0-9]$/) && !e.ctrlKey && !e.metaKey && e.key !== 'Backspace' && e.key !== 'Delete' && e.key !== 'ArrowLeft' && e.key !== 'ArrowRight' && e.key !== 'Tab') {
                     e.preventDefault();
@@ -321,14 +308,11 @@ func serveLoginPage(w http.ResponseWriter, redirectUrl string, errorMessage stri
         function updateActualPassword() {
             let pin = '';
             pinInputs.forEach(input => {
-                // Если мы использовали '●' для маскировки, нужно брать data-value или что-то такое.
-                // Сейчас берем прямое значение, предполагая, что там цифры.
                 pin += input.value; 
             });
             actualPasswordInput.value = pin;
         }
 
-        // Начальный фокус
         if (pinInputs.length > 0) {
             pinInputs[0].focus();
         }
