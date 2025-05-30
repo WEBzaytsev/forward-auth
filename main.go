@@ -335,33 +335,46 @@ func serveLoginPage(w http.ResponseWriter, redirectUrl string, errorMessage stri
             document.getElementById('pin4')
         ];
         const actualPasswordInput = document.getElementById('actualPasswordInput');
-        const loginForm = document.getElementById('loginForm');
+        const loginForm = document.getElementById('loginForm'); 
 
         pinInputs.forEach((input, idx) => {
             input.addEventListener('input', (e) => {
                 let value = e.target.value;
                 if (value.match(/^[0-9]$/)) {
-                    updateActualPassword();
+                    updateActualPassword(); 
                     if (idx < pinInputs.length - 1) {
                         pinInputs[idx + 1].focus();
                     } else {
                         if (actualPasswordInput.value.length === pinInputs.length) {
-                            loginForm.submit();
+                            loginForm.submit(); 
                         }
                     }
                 } else { 
-                    e.target.value = ''; 
-                    updateActualPassword();
+                    if (value.length > 1 && value.match(/^[0-9]/)) {
+                         e.target.value = value[0];
+                         updateActualPassword();
+                         if (idx < pinInputs.length - 1) {
+                            pinInputs[idx + 1].focus();
+                         } else {
+                            if (actualPasswordInput.value.length === pinInputs.length) {
+                                loginForm.submit();
+                            }
+                         }
+                    } else {
+                        e.target.value = ''; 
+                    }
+                    updateActualPassword(); 
                 }
             });
 
             input.addEventListener('keydown', (e) => {
                 if (e.key === 'Backspace') {
+                    if (input.value === '' && idx > 0) {
+                        pinInputs[idx - 1].focus();
+                        pinInputs[idx - 1].value = ''; 
+                    }
                     setTimeout(() => {
                         updateActualPassword();
-                        if (input.value === '' && idx > 0) {
-                            pinInputs[idx - 1].focus();
-                        }
                     }, 0);
                 }
             });
@@ -375,8 +388,8 @@ func serveLoginPage(w http.ResponseWriter, redirectUrl string, errorMessage stri
 
         function updateActualPassword() {
             let pin = '';
-            pinInputs.forEach(input => {
-                pin += input.value; 
+            pinInputs.forEach(inputField => { 
+                pin += inputField.value; 
             });
             actualPasswordInput.value = pin;
         }
