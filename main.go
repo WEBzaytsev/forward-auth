@@ -237,6 +237,7 @@ func serveLoginPage(w http.ResponseWriter, redirectUrl string, errorMessage stri
             border-radius: 8px;
             cursor: pointer;
             transition: background-color 0.3s ease;
+            margin-top: 10px;
         }
         button[type="submit"]:hover {
             background-color: #FFA500;
@@ -266,9 +267,7 @@ func serveLoginPage(w http.ResponseWriter, redirectUrl string, errorMessage stri
 </head>
 <body>
     <div class="login-container">
-        <div class="avatar">
-        </div>
-        <h1>Здравствуйте, Никита!</h1>
+        <h1>Здравствуйте!</h1>
         <p class="subtitle">Введите пароль для входа</p>
         <form method="POST">
             %s
@@ -276,10 +275,6 @@ func serveLoginPage(w http.ResponseWriter, redirectUrl string, errorMessage stri
             <input type="hidden" name="redirect_url" value="%s">
             <button type="submit">Войти</button>
         </form>
-        <div class="links">
-            <a href="#">Не помню код</a>
-            <a href="#">Я не Никита</a>
-        </div>
     </div>
 </body>
 </html>`, errorHTML, htmlEscapedRedirectUrl)))
