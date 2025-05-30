@@ -9,7 +9,7 @@ auth.zaitsv.dev {
 }
 
 webzaitsv.ru {
-	reverse_proxy 127.0.0.1:8080
+	respond "hello webzaitsv.ru"
 	forward_auth forward-auth:8080 {
 		uri /
 	}
