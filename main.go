@@ -45,8 +45,7 @@ func authHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	
 	loginURL := authDomain + "/login?redirect=" + url.QueryEscape(originalURL)
-	w.Header().Set("X-Auth-URL", loginURL)
-	w.WriteHeader(http.StatusUnauthorized)
+	http.Redirect(w, r, loginURL, http.StatusFound)
 }
 
 func loginHandler(w http.ResponseWriter, r *http.Request) {
@@ -80,15 +79,47 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		r.ParseForm()
 		if r.FormValue("password") == password {
 			redirect := r.URL.Query().Get("redirect")
-			if redirect == "" {
-				redirect = "/"
-			}
 			
 			token := generateToken()
-			parsedURL, _ := url.Parse(redirect)
-			callbackURL := parsedURL.Scheme + "://" + parsedURL.Host + "/callback?token=" + token + "&redirect=" + url.QueryEscape(redirect)
+			var callbackURLString string
+
+			// Try to parse the redirect URL to determine if it's absolute
+			parsedRedirectURL, err := url.Parse(redirect)
+			if err == nil && parsedRedirectURL.IsAbs() {
+				// If redirect is an absolute URL, construct callback for that specific host
+				callbackURL := &url.URL{
+					Scheme:   parsedRedirectURL.Scheme,
+					Host:     parsedRedirectURL.Host,
+					Path:     "/callback",
+				}
+				q := callbackURL.Query()
+				q.Set("token", token)
+				q.Set("redirect", redirect) // redirect back to original full URL
+				callbackURL.RawQuery = q.Encode()
+				callbackURLString = callbackURL.String()
+			} else {
+				// If redirect is relative or parsing failed, use authDomain for callback
+				if redirect == "" {
+					redirect = "/" // Default redirect to root of authDomain if not specified
+				}
+				callbackURL := &url.URL{
+					Scheme:   "", // Will be inherited from authDomain
+					Host:     "", // Will be inherited from authDomain
+					Path:     authDomain + "/callback",
+				}
+				parsedAuthDomainURL, _ := url.Parse(authDomain)
+				if parsedAuthDomainURL != nil {
+					callbackURL.Scheme = parsedAuthDomainURL.Scheme
+					callbackURL.Host = parsedAuthDomainURL.Host
+				}
+				q := callbackURL.Query()
+				q.Set("token", token)
+				q.Set("redirect", url.QueryEscape(redirect)) // redirect back to original path on original domain
+				callbackURL.RawQuery = q.Encode()
+				callbackURLString = callbackURL.String()
+			}
 			
-			http.Redirect(w, r, callbackURL, http.StatusFound)
+			http.Redirect(w, r, callbackURLString, http.StatusFound)
 			return
 		}
 		http.Redirect(w, r, r.URL.String(), http.StatusFound)
