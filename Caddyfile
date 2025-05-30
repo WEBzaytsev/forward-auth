@@ -1,5 +1,5 @@
 auth.zaitsv.dev {
-	reverse_proxy forward-auth:3000
+	reverse_proxy forward-auth:8080
 }
 app-test.zaitsv.dev {
 	handle /callback {
