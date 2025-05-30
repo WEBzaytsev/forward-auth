@@ -216,14 +216,16 @@ func serveLoginPage(w http.ResponseWriter, redirectUrl string, errorMessage stri
             margin-bottom: 25px;
         }
         input[type="password"] {
-            width: 100%%;
-            padding: 12px;
-            font-size: 16px;
+            width: 200px;
+            padding: 15px;
+            font-size: 24px;
             border: 1px solid #ddd;
             border-radius: 8px;
             box-sizing: border-box;
             text-align: center;
-            margin-bottom: 15px;
+            margin: 0 auto 20px auto;
+            display: block;
+            letter-spacing: 15px;
         }
         input[type="hidden"] { display: none; }
         button[type="submit"] {
@@ -271,7 +273,7 @@ func serveLoginPage(w http.ResponseWriter, redirectUrl string, errorMessage stri
         <p class="subtitle">Введите пароль для входа</p>
         <form method="POST">
             %s
-            <input type="password" name="password" placeholder="••••" autofocus required>
+            <input type="password" name="password" placeholder="" autofocus required maxlength="4">
             <input type="hidden" name="redirect_url" value="%s">
             <button type="submit">Войти</button>
         </form>
