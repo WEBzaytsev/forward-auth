@@ -1,14 +1,12 @@
-auth.example.com {
-	reverse_proxy forward-auth:8080
+(secure) {
+	forward_auth forward-auth:8080 {
+		uri /
+	}
 }
 app.example.com {
-	handle /callback {
-		reverse_proxy forward-auth:8080
-	}
-
-	forward_auth forward-auth:8080 {
-		uri /auth
-	}
-
 	respond "hello"
+	import secure
+}
+auth.example.com {
+	reverse_proxy forward-auth:8080
 }
