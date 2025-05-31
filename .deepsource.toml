@@ -1,0 +1,14 @@
+version = 1
+
+[[analyzers]]
+name = "go"
+
+  [analyzers.meta]
+  import_root = "github.com/WEBzaytsev/forward-auth"
+  dependencies_vendored = false
+
+[[transformers]]
+name = "gofmt"
+
+[[transformers]]
+name = "gofumpt"

@@ -5,13 +5,14 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
+	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"strconv"
 	"strings"
 	"time"
-	"net"
 )
 
 var (
@@ -22,6 +23,10 @@ var (
 )
 
 func init() {
+	if len(password) < 4 {
+		log.Fatal("AUTH_PASSWORD must be at least 4 characters long")
+	}
+
 	parsedAuthURL, err := url.Parse(authDomain)
 	if err != nil {
 		cookieDomain = ""
@@ -42,12 +47,20 @@ func init() {
 }
 
 func main() {
+	fmt.Println("Starting forward-auth service on port 8080...")
 	http.HandleFunc("/", comprehensiveRootHandler)
 	http.HandleFunc("/logout", logoutHandler)
-	http.ListenAndServe(":8080", nil)
+	server := &http.Server{
+		Addr:              ":8080",
+		ReadHeaderTimeout: 3 * time.Second,
+	}
+
+	if err := server.ListenAndServe(); err != nil {
+		log.Fatalf("http server failed: %v", err)
+	}
 }
 
-func comprehensiveRootHandler(w http.ResponseWriter, r *http.Request) {
+func extractTokenFromRequest(r *http.Request) string {
 	token := ""
 	cookie, err := r.Cookie("auth-token")
 	if err == nil && cookie != nil {
@@ -56,76 +69,83 @@ func comprehensiveRootHandler(w http.ResponseWriter, r *http.Request) {
 	if token == "" {
 		token = r.Header.Get("X-Auth-Token")
 	}
-	isTokenValid := validateToken(token)
+	return token
+}
 
-	originalURL := ""
+func determineOriginalURL(r *http.Request, authDomain string) string {
 	if r.URL.Query().Get("redirect") != "" {
-		originalURL = r.URL.Query().Get("redirect")
-	} else if r.Header.Get("X-Forwarded-Uri") != "" { 
+		return r.URL.Query().Get("redirect")
+	}
+
+	if r.Header.Get("X-Forwarded-Uri") != "" {
 		scheme := r.Header.Get("X-Forwarded-Proto")
 		host := r.Header.Get("X-Forwarded-Host")
 		uri := r.Header.Get("X-Forwarded-Uri")
 		if scheme != "" && host != "" {
-			originalURL = scheme + "://" + host + uri
-		} else {
-			parsedAuthDomain, _ := url.Parse(authDomain)
-			if parsedAuthDomain != nil {
-				originalURL = parsedAuthDomain.Scheme + "://" + parsedAuthDomain.Host + "/"
-			}
+			return scheme + "://" + host + uri
 		}
-	} else {
 		parsedAuthDomain, _ := url.Parse(authDomain)
 		if parsedAuthDomain != nil {
-			originalURL = parsedAuthDomain.Scheme + "://" + parsedAuthDomain.Host + "/"
-		} else {
-			originalURL = "/"
+			return parsedAuthDomain.Scheme + "://" + parsedAuthDomain.Host + "/"
 		}
+		return "/"
 	}
 
-	if r.Method == "POST" {
-		r.ParseForm()
-		if r.FormValue("password") == password {
-			newToken := generateToken()
-			cookieToSet := http.Cookie{
-				Name:     "auth-token",
-				Value:    newToken,
-				Path:     "/",
-				MaxAge:   86400 * 7,
-				HttpOnly: true,
-				SameSite: http.SameSiteLaxMode,
-			}
-			if cookieDomain != "" {
-				cookieToSet.Domain = cookieDomain
-			}
-			http.SetCookie(w, &cookieToSet)
-			postRedirectURL := r.FormValue("redirect_url")
-			if postRedirectURL == "" { 
-				postRedirectURL = "/"
-				parsedAuthDomain, _ := url.Parse(authDomain)
-				if parsedAuthDomain != nil {
-					postRedirectURL = parsedAuthDomain.Scheme + "://" + parsedAuthDomain.Host + "/"
-				}
-			}
-			http.Redirect(w, r, postRedirectURL, http.StatusFound)
-			return
-		} else {
-			errorMessage := "Invalid password"
-			redirectURLFromForm := r.FormValue("redirect_url")
-			if redirectURLFromForm == "" { 
-			    redirectURLFromForm = originalURL
-			}
-			serveLoginPage(w, redirectURLFromForm, errorMessage)
-			return
+	parsedAuthDomain, _ := url.Parse(authDomain)
+	if parsedAuthDomain != nil {
+		return parsedAuthDomain.Scheme + "://" + parsedAuthDomain.Host + "/"
+	}
+	return "/"
+}
+
+func isOnAuthDomainRoot(r *http.Request, authDomain string) bool {
+	parsedAuthURL, _ := url.Parse(authDomain)
+	return parsedAuthURL != nil && r.Host == parsedAuthURL.Host && r.URL.Path == "/"
+}
+
+func handlePostLogin(w http.ResponseWriter, r *http.Request, originalURL string) {
+	r.ParseForm()
+	if r.FormValue("password") == password {
+		newToken := generateToken()
+		cookieToSet := http.Cookie{
+			Name:     "auth-token",
+			Value:    newToken,
+			Path:     "/",
+			MaxAge:   86400 * 7,
+			HttpOnly: true,
+			SameSite: http.SameSiteLaxMode,
 		}
+		if cookieDomain != "" {
+			cookieToSet.Domain = cookieDomain
+		}
+		http.SetCookie(w, &cookieToSet)
+		postRedirectURL := r.FormValue("redirect_url")
+		if postRedirectURL == "" {
+			postRedirectURL = "/"
+			parsedAuthDomain, _ := url.Parse(authDomain)
+			if parsedAuthDomain != nil {
+				postRedirectURL = parsedAuthDomain.Scheme + "://" + parsedAuthDomain.Host + "/"
+			}
+		}
+		http.Redirect(w, r, postRedirectURL, http.StatusFound)
+		return
 	}
 
-	if isTokenValid {
-		if r.Header.Get("X-Forwarded-Uri") != "" {
-			w.WriteHeader(http.StatusOK)
-			return
-		} else {
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			w.Write([]byte(`<!DOCTYPE html>
+	errorMessage := "Invalid password"
+	redirectURLFromForm := r.FormValue("redirect_url")
+	if redirectURLFromForm == "" {
+		redirectURLFromForm = originalURL
+	}
+	serveLoginPage(w, redirectURLFromForm, errorMessage)
+}
+
+func handleAuthorizedResponse(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("X-Forwarded-Uri") != "" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Write([]byte(`<!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
@@ -187,29 +207,46 @@ func comprehensiveRootHandler(w http.ResponseWriter, r *http.Request) {
     </div>
 </body>
 </html>`))
-			return
-		}
-	}
+}
 
+func handleUnauthenticated(w http.ResponseWriter, r *http.Request, originalURL string, authDomain string) {
 	parsedAuthURL, _ := url.Parse(authDomain)
-	isOnAuthDomainRoot := false
-	if parsedAuthURL != nil && r.Host == parsedAuthURL.Host && r.URL.Path == "/" {
-		isOnAuthDomainRoot = true
-	}
-
-	if isOnAuthDomainRoot {
-		serveLoginPage(w, originalURL, "") 
-	} else if r.Header.Get("X-Forwarded-Uri") != "" && (parsedAuthURL == nil || r.Host != parsedAuthURL.Host) {
+	if r.Header.Get("X-Forwarded-Uri") != "" && (parsedAuthURL == nil || r.Host != parsedAuthURL.Host) {
 		loginRedirectURL := authDomain + "/?redirect=" + url.QueryEscape(originalURL)
 		http.Redirect(w, r, loginRedirectURL, http.StatusFound)
-	} else {
-		if parsedAuthURL != nil && strings.HasPrefix(originalURL, authDomain) {
-		    serveLoginPage(w, originalURL, "")
-		} else {
-		    loginRedirectURL := authDomain + "/?redirect=" + url.QueryEscape(originalURL)
-		    http.Redirect(w, r, loginRedirectURL, http.StatusFound)
-		}
+		return
 	}
+
+	if parsedAuthURL != nil && strings.HasPrefix(originalURL, authDomain) {
+		serveLoginPage(w, originalURL, "")
+		return
+	}
+
+	loginRedirectURL := authDomain + "/?redirect=" + url.QueryEscape(originalURL)
+	http.Redirect(w, r, loginRedirectURL, http.StatusFound)
+}
+
+func comprehensiveRootHandler(w http.ResponseWriter, r *http.Request) {
+	token := extractTokenFromRequest(r)
+	isTokenValid := validateToken(token)
+	originalURL := determineOriginalURL(r, authDomain)
+
+	if r.Method == http.MethodPost {
+		handlePostLogin(w, r, originalURL)
+		return
+	}
+
+	if isTokenValid {
+		handleAuthorizedResponse(w, r)
+		return
+	}
+
+	if isOnAuthDomainRoot(r, authDomain) {
+		serveLoginPage(w, originalURL, "")
+		return
+	}
+
+	handleUnauthenticated(w, r, originalURL, authDomain)
 }
 
 func serveLoginPage(w http.ResponseWriter, redirectUrl string, errorMessage string) {
@@ -220,6 +257,12 @@ func serveLoginPage(w http.ResponseWriter, redirectUrl string, errorMessage stri
 	}
 
 	htmlEscapedRedirectUrl := strings.ReplaceAll(redirectUrl, "\"", "&quot;")
+
+	var pinInputsHTMLBuilder strings.Builder
+	for i := 0; i < len(password); i++ {
+		pinInputsHTMLBuilder.WriteString(`<input type="text" class="pin-digit-input" maxlength="1" pattern="[0-9]" inputmode="numeric">`)
+	}
+	pinInputsHTML := pinInputsHTMLBuilder.String()
 
 	w.Write([]byte(fmt.Sprintf(`<!DOCTYPE html>
 <html lang="ru">
@@ -244,6 +287,16 @@ func serveLoginPage(w http.ResponseWriter, redirectUrl string, errorMessage stri
             box-shadow: 0 8px 20px rgba(0,0,0,0.1);
             text-align: center;
             width: 340px; 
+            box-sizing: border-box;
+        }
+        @media (max-width: 480px) {
+            .login-container {
+                width: auto;
+                margin-left: 20px;
+                margin-right: 20px;
+                padding-left: 20px;
+                padding-right: 20px;
+            }
         }
         h1 {
             font-size: 24px;
@@ -312,14 +365,11 @@ func serveLoginPage(w http.ResponseWriter, redirectUrl string, errorMessage stri
 <body>
     <div class="login-container">
         <h1>Здравствуйте!</h1> 
-        <p class="subtitle">Введите PIN-код для входа</p>
+        <p class="subtitle">Введите пароль для входа</p>
         <form method="POST" id="loginForm">
             %s 
             <div class="pin-input-container">
-                <input type="text" class="pin-digit-input" id="pin1" maxlength="1" pattern="[0-9]" inputmode="numeric">
-                <input type="text" class="pin-digit-input" id="pin2" maxlength="1" pattern="[0-9]" inputmode="numeric">
-                <input type="text" class="pin-digit-input" id="pin3" maxlength="1" pattern="[0-9]" inputmode="numeric">
-                <input type="text" class="pin-digit-input" id="pin4" maxlength="1" pattern="[0-9]" inputmode="numeric">
+				%s
             </div>
             <input type="hidden" name="password" id="actualPasswordInput">
             <input type="hidden" name="redirect_url" value="%s">
@@ -328,18 +378,14 @@ func serveLoginPage(w http.ResponseWriter, redirectUrl string, errorMessage stri
     </div>
 
     <script>
-        const pinInputs = [
-            document.getElementById('pin1'), 
-            document.getElementById('pin2'), 
-            document.getElementById('pin3'), 
-            document.getElementById('pin4')
-        ];
+        const pinInputs = document.querySelectorAll('.pin-digit-input');
         const actualPasswordInput = document.getElementById('actualPasswordInput');
         const loginForm = document.getElementById('loginForm'); 
 
         pinInputs.forEach((input, idx) => {
             input.addEventListener('input', (e) => {
                 let value = e.target.value;
+                
                 if (value.match(/^[0-9]$/)) {
                     updateActualPassword(); 
                     if (idx < pinInputs.length - 1) {
@@ -399,7 +445,7 @@ func serveLoginPage(w http.ResponseWriter, redirectUrl string, errorMessage stri
         }
     </script>
 </body>
-</html>`, errorHTML, htmlEscapedRedirectUrl)))
+</html>`, errorHTML, pinInputsHTML, htmlEscapedRedirectUrl)))
 }
 
 func logoutHandler(w http.ResponseWriter, r *http.Request) {
@@ -436,16 +482,16 @@ func validateToken(token string) bool {
 	if len(parts) != 2 {
 		return false
 	}
-	
+
 	data, err := base64.URLEncoding.DecodeString(parts[0])
 	if err != nil {
 		return false
 	}
-	
+
 	h := hmac.New(sha256.New, secret)
 	h.Write(data)
 	expectedSignature := base64.URLEncoding.EncodeToString(h.Sum(nil))
-	
+
 	return hmac.Equal([]byte(parts[1]), []byte(expectedSignature))
 }
 
@@ -454,4 +500,4 @@ func getEnv(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
-} 
+}
