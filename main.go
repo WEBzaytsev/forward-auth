@@ -42,6 +42,7 @@ func init() {
 }
 
 func main() {
+	fmt.Println("Starting forward-auth service on port 8080...")
 	http.HandleFunc("/", comprehensiveRootHandler)
 	http.HandleFunc("/logout", logoutHandler)
 	http.ListenAndServe(":8080", nil)
