@@ -1,70 +1,70 @@
-name: Publish Docker image to GHCR
+name: Build and Push Docker Image
 
 on:
   push:
-    branches: [ "main" ] # Действие будет запускаться при push в ветку main
-    # Вы можете добавить другие триггеры, например, создание релиза:
-    # release:
-    #   types: [published]
+    branches:
+      - main
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  publish-ghcr:
-    name: Build and publish Docker image
+  build-and-push:
     runs-on: ubuntu-latest
     permissions:
-      contents: read  # Необходимо для checkout кода
-      packages: write # Необходимо для публикации пакетов (Docker-образов) в GHCR
+      contents: read
+      packages: write
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-        # Этот шаг полезен для сборки multi-platform образов, но не строго обязателен для одного x86_64
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-        id: buildx
 
-      - name: Log in to GitHub Container Registry
+      - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }} # Или github.repository_owner
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata for Docker
+      - name: Extract metadata (tags, labels) for Docker
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository }} # Формирует имя образа как ghcr.io/OWNER/REPO_NAME
-          # Пример: ghcr.io/webzaytsev/vpn-bot
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: type=raw,value=latest
+          labels: |
+            org.opencontainers.image.title=${{ env.IMAGE_NAME }}
+            org.opencontainers.image.vendor=WebZaytsev
+            org.opencontainers.image.version={{version}}
+            org.opencontainers.image.created={{date 'YYYY-MM-DD HH:mm:ss'}}
+            org.opencontainers.image.revision={{sha}}
 
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
+      - name: Build and push
+        uses: docker/build-push-action@v6
         with:
-          context: . # Путь к Dockerfile (корень проекта)
-          push: true
+          context: .
+          push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha # Опционально: кеширование для ускорения сборок
-          cache-to: type=gha,mode=max # Опционально: кеширование 
+          cache-from: type=gha
+          cache-to: type=gha,mode=max 
   deploy-server:
-    needs: publish-ghcr
+    needs: build-and-push
     runs-on: ubuntu-latest
     if: github.event_name != 'pull_request'
-
     steps:
       - name: Deploy to Server
-        uses: appleboy/ssh-action@v1.2.0
+        uses: appleboy/ssh-action@v1.2.2
         with:
-          host: ${{ secrets.SERVER_IP_FRONT }}
+          host: ${{ secrets.SERVER_IP }}
           username: root
           port: 2114
-          key: ${{ secrets.SSH_PRIVATE_KEY_FRONT }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            cd ${HOME}/lab/forward-auth/
+            cd ${HOME}/lab/pet-projects/forward-auth
             docker compose pull
             docker compose up -d
             docker compose ps --format="table {{.Names}}\t{{.Status}}"
