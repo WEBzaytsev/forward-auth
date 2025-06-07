@@ -256,6 +256,16 @@ func serveLoginPage(w http.ResponseWriter, redirectUrl string, errorMessage stri
             box-shadow: 0 8px 20px rgba(0,0,0,0.1);
             text-align: center;
             width: 340px; 
+            box-sizing: border-box;
+        }
+        @media (max-width: 480px) {
+            .login-container {
+                width: auto;
+                margin-left: 20px;
+                margin-right: 20px;
+                padding-left: 20px;
+                padding-right: 20px;
+            }
         }
         h1 {
             font-size: 24px;
