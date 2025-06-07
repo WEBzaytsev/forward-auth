@@ -5,13 +5,14 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
+	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"strconv"
 	"strings"
 	"time"
-	"net"
 )
 
 var (
@@ -22,6 +23,10 @@ var (
 )
 
 func init() {
+	if len(password) < 4 {
+		log.Fatal("AUTH_PASSWORD must be at least 4 characters long")
+	}
+
 	parsedAuthURL, err := url.Parse(authDomain)
 	if err != nil {
 		cookieDomain = ""
@@ -62,7 +67,7 @@ func comprehensiveRootHandler(w http.ResponseWriter, r *http.Request) {
 	originalURL := ""
 	if r.URL.Query().Get("redirect") != "" {
 		originalURL = r.URL.Query().Get("redirect")
-	} else if r.Header.Get("X-Forwarded-Uri") != "" { 
+	} else if r.Header.Get("X-Forwarded-Uri") != "" {
 		scheme := r.Header.Get("X-Forwarded-Proto")
 		host := r.Header.Get("X-Forwarded-Host")
 		uri := r.Header.Get("X-Forwarded-Uri")
@@ -100,7 +105,7 @@ func comprehensiveRootHandler(w http.ResponseWriter, r *http.Request) {
 			}
 			http.SetCookie(w, &cookieToSet)
 			postRedirectURL := r.FormValue("redirect_url")
-			if postRedirectURL == "" { 
+			if postRedirectURL == "" {
 				postRedirectURL = "/"
 				parsedAuthDomain, _ := url.Parse(authDomain)
 				if parsedAuthDomain != nil {
@@ -112,8 +117,8 @@ func comprehensiveRootHandler(w http.ResponseWriter, r *http.Request) {
 		} else {
 			errorMessage := "Invalid password"
 			redirectURLFromForm := r.FormValue("redirect_url")
-			if redirectURLFromForm == "" { 
-			    redirectURLFromForm = originalURL
+			if redirectURLFromForm == "" {
+				redirectURLFromForm = originalURL
 			}
 			serveLoginPage(w, redirectURLFromForm, errorMessage)
 			return
@@ -199,16 +204,16 @@ func comprehensiveRootHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if isOnAuthDomainRoot {
-		serveLoginPage(w, originalURL, "") 
+		serveLoginPage(w, originalURL, "")
 	} else if r.Header.Get("X-Forwarded-Uri") != "" && (parsedAuthURL == nil || r.Host != parsedAuthURL.Host) {
 		loginRedirectURL := authDomain + "/?redirect=" + url.QueryEscape(originalURL)
 		http.Redirect(w, r, loginRedirectURL, http.StatusFound)
 	} else {
 		if parsedAuthURL != nil && strings.HasPrefix(originalURL, authDomain) {
-		    serveLoginPage(w, originalURL, "")
+			serveLoginPage(w, originalURL, "")
 		} else {
-		    loginRedirectURL := authDomain + "/?redirect=" + url.QueryEscape(originalURL)
-		    http.Redirect(w, r, loginRedirectURL, http.StatusFound)
+			loginRedirectURL := authDomain + "/?redirect=" + url.QueryEscape(originalURL)
+			http.Redirect(w, r, loginRedirectURL, http.StatusFound)
 		}
 	}
 }
@@ -221,6 +226,12 @@ func serveLoginPage(w http.ResponseWriter, redirectUrl string, errorMessage stri
 	}
 
 	htmlEscapedRedirectUrl := strings.ReplaceAll(redirectUrl, "\"", "&quot;")
+
+	var pinInputsHTMLBuilder strings.Builder
+	for i := 0; i < len(password); i++ {
+		pinInputsHTMLBuilder.WriteString(`<input type="text" class="pin-digit-input" maxlength="1" pattern="[0-9]" inputmode="numeric">`)
+	}
+	pinInputsHTML := pinInputsHTMLBuilder.String()
 
 	w.Write([]byte(fmt.Sprintf(`<!DOCTYPE html>
 <html lang="ru">
@@ -313,14 +324,11 @@ func serveLoginPage(w http.ResponseWriter, redirectUrl string, errorMessage stri
 <body>
     <div class="login-container">
         <h1>Здравствуйте!</h1> 
-        <p class="subtitle">Введите PIN-код для входа</p>
+        <p class="subtitle">Введите пароль для входа</p>
         <form method="POST" id="loginForm">
             %s 
             <div class="pin-input-container">
-                <input type="text" class="pin-digit-input" id="pin1" maxlength="1" pattern="[0-9]" inputmode="numeric">
-                <input type="text" class="pin-digit-input" id="pin2" maxlength="1" pattern="[0-9]" inputmode="numeric">
-                <input type="text" class="pin-digit-input" id="pin3" maxlength="1" pattern="[0-9]" inputmode="numeric">
-                <input type="text" class="pin-digit-input" id="pin4" maxlength="1" pattern="[0-9]" inputmode="numeric">
+				%s
             </div>
             <input type="hidden" name="password" id="actualPasswordInput">
             <input type="hidden" name="redirect_url" value="%s">
@@ -329,18 +337,14 @@ func serveLoginPage(w http.ResponseWriter, redirectUrl string, errorMessage stri
     </div>
 
     <script>
-        const pinInputs = [
-            document.getElementById('pin1'), 
-            document.getElementById('pin2'), 
-            document.getElementById('pin3'), 
-            document.getElementById('pin4')
-        ];
+        const pinInputs = document.querySelectorAll('.pin-digit-input');
         const actualPasswordInput = document.getElementById('actualPasswordInput');
         const loginForm = document.getElementById('loginForm'); 
 
         pinInputs.forEach((input, idx) => {
             input.addEventListener('input', (e) => {
                 let value = e.target.value;
+                
                 if (value.match(/^[0-9]$/)) {
                     updateActualPassword(); 
                     if (idx < pinInputs.length - 1) {
@@ -400,7 +404,7 @@ func serveLoginPage(w http.ResponseWriter, redirectUrl string, errorMessage stri
         }
     </script>
 </body>
-</html>`, errorHTML, htmlEscapedRedirectUrl)))
+</html>`, errorHTML, pinInputsHTML, htmlEscapedRedirectUrl)))
 }
 
 func logoutHandler(w http.ResponseWriter, r *http.Request) {
@@ -437,16 +441,16 @@ func validateToken(token string) bool {
 	if len(parts) != 2 {
 		return false
 	}
-	
+
 	data, err := base64.URLEncoding.DecodeString(parts[0])
 	if err != nil {
 		return false
 	}
-	
+
 	h := hmac.New(sha256.New, secret)
 	h.Write(data)
 	expectedSignature := base64.URLEncoding.EncodeToString(h.Sum(nil))
-	
+
 	return hmac.Equal([]byte(parts[1]), []byte(expectedSignature))
 }
 
@@ -455,4 +459,4 @@ func getEnv(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
-} 
+}
