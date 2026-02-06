@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
+	"html"
 	"log"
 	"net"
 	"net/http"
@@ -72,9 +73,42 @@ func extractTokenFromRequest(r *http.Request) string {
 	return token
 }
 
+func isRedirectAllowed(redirectURL string) bool {
+	if redirectURL == "" || redirectURL == "/" {
+		return true
+	}
+	parsed, err := url.Parse(redirectURL)
+	if err != nil {
+		return false
+	}
+	if parsed.Scheme != "" && parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return false
+	}
+	if parsed.Host == "" {
+		p := parsed.Path
+		if p == "" {
+			p = "/"
+		}
+		return len(p) >= 1 && p[0] == '/' && (len(p) < 2 || (p[1] != '/' && p[1] != '\\'))
+	}
+	parsedAuth, _ := url.Parse(authDomain)
+	if parsedAuth == nil {
+		return false
+	}
+	authHost := strings.ToLower(parsedAuth.Hostname())
+	redirectHost := strings.ToLower(parsed.Hostname())
+	if redirectHost == authHost {
+		return true
+	}
+	if cookieDomain != "" && (redirectHost == cookieDomain || strings.HasSuffix(redirectHost, "."+cookieDomain)) {
+		return true
+	}
+	return false
+}
+
 func determineOriginalURL(r *http.Request, authDomain string) string {
-	if r.URL.Query().Get("redirect") != "" {
-		return r.URL.Query().Get("redirect")
+	if queryRedirect := r.URL.Query().Get("redirect"); queryRedirect != "" && isRedirectAllowed(queryRedirect) {
+		return queryRedirect
 	}
 
 	if r.Header.Get("X-Forwarded-Uri") != "" {
@@ -113,6 +147,7 @@ func handlePostLogin(w http.ResponseWriter, r *http.Request, originalURL string)
 			Path:     "/",
 			MaxAge:   86400 * 7,
 			HttpOnly: true,
+			Secure:   strings.HasPrefix(authDomain, "https:"),
 			SameSite: http.SameSiteLaxMode,
 		}
 		if cookieDomain != "" {
@@ -120,7 +155,7 @@ func handlePostLogin(w http.ResponseWriter, r *http.Request, originalURL string)
 		}
 		http.SetCookie(w, &cookieToSet)
 		postRedirectURL := r.FormValue("redirect_url")
-		if postRedirectURL == "" {
+		if postRedirectURL == "" || !isRedirectAllowed(postRedirectURL) {
 			postRedirectURL = "/"
 			parsedAuthDomain, _ := url.Parse(authDomain)
 			if parsedAuthDomain != nil {
@@ -256,7 +291,7 @@ func serveLoginPage(w http.ResponseWriter, redirectUrl string, errorMessage stri
 		errorHTML = "<p class=\"error-message\">" + errorMessage + "</p>"
 	}
 
-	htmlEscapedRedirectUrl := strings.ReplaceAll(redirectUrl, "\"", "&quot;")
+	htmlEscapedRedirectUrl := html.EscapeString(redirectUrl)
 
 	var pinInputsHTMLBuilder strings.Builder
 	for i := 0; i < len(password); i++ {
@@ -456,6 +491,7 @@ func logoutHandler(w http.ResponseWriter, r *http.Request) {
 			Path:     "/",
 			MaxAge:   -1,
 			HttpOnly: true,
+			Secure:   strings.HasPrefix(authDomain, "https:"),
 			SameSite: http.SameSiteLaxMode,
 		}
 		if cookieDomain != "" {
