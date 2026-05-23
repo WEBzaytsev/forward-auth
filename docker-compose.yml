@@ -1,11 +1,17 @@
-version: '3'
-
 services:
   forward-auth:
     build: .
+    container_name: forward-auth
+    restart: unless-stopped
     environment:
-      - AUTH_PASSWORD=1234
-      - SESSION_SECRET=your-secret-key-32-bytes-minimum
-      - AUTH_DOMAIN=http://auth.zaitsv.dev
+      AUTH_PASSWORD: "1234"
+      SESSION_SECRET: your-secret-key-32-bytes-minimum
+      AUTH_DOMAIN: http://auth.example.com
     ports:
       - "8080:8080"
+    networks:
+      - proxy
+
+networks:
+  proxy:
+    external: true
