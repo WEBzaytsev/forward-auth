@@ -31,6 +31,8 @@ function base64urlDecode(str: string): Uint8Array {
   return Uint8Array.from(binary, (c) => c.charCodeAt(0));
 }
 
+const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
+
 export async function verifyTokenEdge(token: string): Promise<boolean> {
   if (!token) return false;
 
@@ -46,6 +48,10 @@ export async function verifyTokenEdge(token: string): Promise<boolean> {
     return false;
   }
 
+  const issuedAt = parseInt(timestamp, 10);
+  if (isNaN(issuedAt)) return false;
+  if (Math.floor(Date.now() / 1000) - issuedAt > SESSION_TTL_SECONDS) return false;
+
   try {
     const key = await getKey();
     const expectedSig = await crypto.subtle.sign(
@@ -59,7 +65,6 @@ export async function verifyTokenEdge(token: string): Promise<boolean> {
 
     if (expectedBytes.length !== actualBytes.length) return false;
 
-    // Constant-time comparison
     let diff = 0;
     for (let i = 0; i < expectedBytes.length; i++) {
       diff |= expectedBytes[i] ^ actualBytes[i];

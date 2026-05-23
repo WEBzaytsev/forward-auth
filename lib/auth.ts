@@ -10,6 +10,8 @@ export function signToken(): string {
   return `${data}.${sig}`;
 }
 
+const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
+
 export function verifyToken(token: string): boolean {
   if (!token) return false;
 
@@ -24,6 +26,10 @@ export function verifyToken(token: string): boolean {
   } catch {
     return false;
   }
+
+  const issuedAt = parseInt(timestamp, 10);
+  if (isNaN(issuedAt)) return false;
+  if (Math.floor(Date.now() / 1000) - issuedAt > SESSION_TTL_SECONDS) return false;
 
   const expectedSig = createHmac("sha256", config.sessionSecret)
     .update(timestamp)
