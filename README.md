@@ -1,36 +1,28 @@
 # Simple Forward Auth
 
-Это простой сервис **forward authentication**, который позволяет защитить ваши веб-приложения паролем. Он легко интегрируется с обратными прокси, такими как Caddy, Traefik или Nginx.
+Простой сервис **forward authentication** для защиты веб-приложений PIN-кодом. Интегрируется с Caddy через директиву `forward_auth`.
 
-## ✨ Особенности
+## Особенности
 
-- **Простая защита**: Защита любого количества сайтов одним цифровым паролем (PIN-кодом).
-- **Легкая настройка**: Настройка с помощью переменных окружения.
-- **Интеграция с Docker**: Готовый к использованию Docker-образ.
-- **Адаптивный UI**: Приятный интерфейс для страницы входа, который автоматически подстраивается под длину вашего пароля.
-- **Поддержка поддоменов**: Автоматическая настройка cookie для работы на всех поддоменах основного домена.
+- Один PIN-код на все защищённые сайты
+- Настройка через переменные окружения
+- Docker-образ: `ghcr.io/owner/forward-auth:latest`
+- Cookie на корневом домене — после входа на `auth.*` доступ открывается на всех поддоменах
 
-## 🚀 Начало работы
+## Быстрый старт
 
-Сервис предназначен для запуска в качестве Docker-контейнера.
-
-### 1. docker-compose.yml
-
-Создайте файл `docker-compose.yml` со следующим содержимым:
+### docker-compose.yml
 
 ```yaml
-version: '3.8'
-
 services:
   forward-auth:
-    image: ghcr.io/owner/forward-auth:latest # Используйте этот образ
-    build: . # Или соберите локально
+    image: ghcr.io/owner/forward-auth:latest
     container_name: forward-auth
     restart: unless-stopped
     environment:
-      - AUTH_PASSWORD=1234
-      - SESSION_SECRET=your-super-secret-key-32-bytes-long
-      - AUTH_DOMAIN=https://auth.example.com
+      AUTH_PASSWORD: "1234"
+      SESSION_SECRET: your-super-secret-key-32-bytes-long
+      AUTH_DOMAIN: https://auth.example.com
     networks:
       - proxy
 
@@ -39,56 +31,81 @@ networks:
     external: true
 ```
 
-### 2. Настройка обратного прокси
+`AUTH_DOMAIN` должен совпадать с доменом, на который проксируется сам сервис (блок `auth.*` в Caddyfile).
 
-Вам потребуется обратный прокси для управления трафиком.
+### Caddyfile
 
-#### Пример для Caddy (`Caddyfile`)
-
-Caddy - это современный веб-сервер с автоматическим HTTPS.
+Общий snippet для переиспользования:
 
 ```caddy
-# Домен для самого сервиса аутентификации
-auth.example.com {
-    reverse_proxy forward-auth:8080
-}
-
-# Пример защищенного приложения
-app.example.com {
-    forward_auth forward-auth:8080 {
-        uri / # Проверяет все запросы к этому сайту
-        copy_headers X-Forwarded-Proto X-Forwarded-Host X-Forwarded-Uri
-    }
-    
-    # Ваше приложение
-    reverse_proxy my-app:3000
+(auth) {
+	forward_auth forward-auth:8080 {
+		uri /
+	}
 }
 ```
 
-- `auth.example.com` - это домен, на котором будет доступна страница входа. Он должен соответствовать переменной `AUTH_DOMAIN`.
-- `app.example.com` - это ваше приложение, которое вы хотите защитить. Директива `forward_auth` отправляет запрос на проверку в сервис `forward-auth`.
+Пример:
 
-### 3. Запуск
+```caddy
+(auth) {
+	forward_auth forward-auth:8080 {
+		uri /
+	}
+}
 
-1.  Убедитесь, что у вас создана внешняя сеть `proxy` для Caddy (`docker network create proxy`).
-2.  Запустите сервисы:
+auth.example.com {
+	reverse_proxy forward-auth:8080
+}
+
+logs.example.com {
+	reverse_proxy dozzle:8080
+	import auth
+}
+
+git.example.com {
+	reverse_proxy forgejo:3000
+}
+
+task.example.com {
+	reverse_proxy youtrack:8080
+}
+
+stats.example.com {
+	reverse_proxy umami:3000
+}
+```
+
+В `docker-compose.yml` для этого случая: `AUTH_DOMAIN=https://auth.example.com`.
+
+Защита только там, где нужна — `import auth`. Остальные сайты (`git`, `task`, `stats`) остаются открытыми.
+
+Как это работает:
+
+1. Запрос на защищённый сайт (`logs.example.com`) уходит в `forward-auth`.
+2. Если cookie нет — редирект на `auth.example.com/?redirect=...`.
+3. После ввода PIN cookie ставится на `.example.com` и работает на всех поддоменах.
+4. Повторный запрос проходит, Caddy проксирует трафик в приложение.
+
+`copy_headers` не нужен — Caddy сам передаёт `X-Forwarded-Proto`, `X-Forwarded-Host` и `X-Forwarded-Uri`.
+
+### Запуск
 
 ```bash
-docker-compose up -d
+docker network create proxy   # если ещё не создана
+docker compose up -d
 ```
 
-Теперь при попытке доступа к `app.example.com` вас перенаправит на `auth.example.com` для ввода PIN-кода. После успешного входа вы получите доступ к приложению.
+## Конфигурация
 
-## ⚙️ Конфигурация
+| Переменная       | Описание                                              | По умолчанию                         |
+| ---------------- | ----------------------------------------------------- | ------------------------------------ |
+| `AUTH_PASSWORD`  | PIN-код, минимум 4 цифры                              | `1234`                               |
+| `SESSION_SECRET` | Ключ подписи cookie, минимум 32 байта                 | `secret-key-32-bytes-long-minimum`   |
+| `AUTH_DOMAIN`    | URL сервиса входа, например `https://auth.example.com` | `http://auth.example.com`          |
 
-Сервис настраивается с помощью переменных окружения:
+Cookie domain вычисляется из `AUTH_DOMAIN`: для `auth.example.com` будет `.example.com`.
 
-| Переменная       | Описание                                                                                                   | Значение по умолчанию                |
-| ---------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------ |
-| `AUTH_PASSWORD`  | Цифровой пароль (PIN-код) для доступа. Длина должна быть не менее 4 символов.                              | `1234`                               |
-| `SESSION_SECRET` | Секретный ключ для подписи сессионных cookie. **Обязательно измените на надежное значение (минимум 32 байта)!** | `secret-key-32-bytes-long-minimum` |
-| `AUTH_DOMAIN`    | Полный URL-адрес, по которому доступен сервис аутентификации (например, `https://auth.example.com`).         | `http://auth.example.com`             |
+## Участие в разработке
 
-## 🤝 Участие в разработке
-
-Приветствую любой вклад! Если у вас есть идеи по улучшению или вы нашли ошибку, пожалуйста, создайте [issue](https://github.com/WEBzaytsev/forward-auth/issues) или [pull request](https://github.com/WEBzaytsev/forward-auth/pulls). 
+Issues и PR приветствуются: [github.com/WEBzaytsev/forward-auth](https://github.com/WEBzaytsev/forward-auth).
