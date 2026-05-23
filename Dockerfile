@@ -1,27 +1,22 @@
 # syntax=docker/dockerfile:1.7
 ARG NODE_VERSION=20
 
-# 1. Base
+# 1. Base with pnpm
 FROM node:${NODE_VERSION}-slim AS base
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable
 
-# 2. Install deps
-FROM base AS deps
+# 2. Build
+FROM base AS builder
 WORKDIR /app
 COPY package.json pnpm-lock.yaml .npmrc ./
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
-
-# 3. Build
-FROM base AS builder
-WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN pnpm build
 
-# 4. Runner
+# 3. Runner
 FROM node:${NODE_VERSION}-slim AS runner
 WORKDIR /app
 
