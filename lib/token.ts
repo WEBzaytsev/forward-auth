@@ -36,3 +36,10 @@ export function parsePayloadString(payload: string): TokenPayload | null {
 export function isExpired(issuedAt: number, ttlSeconds: number): boolean {
   return Math.floor(Date.now() / 1000) - issuedAt > ttlSeconds;
 }
+
+// Global revocation lever: tokens issued before the configured epoch are
+// rejected. Bumping AUTH_TOKEN_EPOCH invalidates every existing token without
+// rotating the secret or using any external store.
+export function isBeforeEpoch(issuedAt: number, epochSeconds: number): boolean {
+  return epochSeconds > 0 && issuedAt < epochSeconds;
+}

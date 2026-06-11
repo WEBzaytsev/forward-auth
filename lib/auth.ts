@@ -1,6 +1,11 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { config } from "./config";
-import { buildPayloadString, isExpired, parsePayloadString } from "./token";
+import {
+  buildPayloadString,
+  isBeforeEpoch,
+  isExpired,
+  parsePayloadString,
+} from "./token";
 
 function sign(payload: string): string {
   return createHmac("sha256", config.sessionSecret)
@@ -41,6 +46,7 @@ export function verifyToken(token: string): boolean {
   const parsed = parsePayloadString(payload);
   if (!parsed) return false;
   if (isExpired(parsed.issuedAt, config.sessionTtlSeconds)) return false;
+  if (isBeforeEpoch(parsed.issuedAt, config.tokenEpoch)) return false;
 
   const expectedSig = sign(payload);
 

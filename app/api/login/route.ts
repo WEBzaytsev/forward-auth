@@ -3,11 +3,14 @@ import { signToken, verifyPassword } from "@/lib/auth";
 import { config } from "@/lib/config";
 import {
   checkRateLimit,
+  FAILURE_DELAY_MS,
   getClientIp,
   recordFailure,
   recordSuccess,
 } from "@/lib/rate-limit";
 import { isRedirectAllowed } from "@/lib/redirect";
+
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export async function POST(req: NextRequest) {
   const ip = getClientIp(req.headers);
@@ -36,6 +39,7 @@ export async function POST(req: NextRequest) {
 
   if (!verifyPassword(pin)) {
     recordFailure(ip);
+    await delay(FAILURE_DELAY_MS);
     return NextResponse.json({ error: "Invalid password" }, { status: 401 });
   }
 

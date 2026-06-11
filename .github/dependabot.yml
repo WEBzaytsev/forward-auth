@@ -1,0 +1,15 @@
+version: 2
+updates:
+  # Keep GitHub Actions pinned-by-SHA references current.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  # Keep npm dependencies (and their security fixes) up to date.
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5

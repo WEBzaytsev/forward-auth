@@ -1,6 +1,11 @@
 # syntax=docker/dockerfile:1.7
 ARG NODE_VERSION=20
 
+# Supply-chain hardening: pin the base image by digest for reproducible builds.
+# Resolve a digest with:
+#   docker buildx imagetools inspect node:20-slim
+# then replace the tag below, e.g. node:20-slim@sha256:<digest>.
+
 # 1. Base with pnpm
 FROM node:${NODE_VERSION}-slim AS base
 ENV PNPM_HOME="/pnpm"
@@ -35,4 +40,8 @@ COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 
 USER nextjs
 EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:8080/').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+
 CMD ["node", "server.js"]

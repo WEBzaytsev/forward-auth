@@ -19,6 +19,9 @@ const password = process.env.AUTH_PASSWORD ?? "";
 const sessionSecret = process.env.SESSION_SECRET ?? "";
 const authDomain = process.env.AUTH_DOMAIN ?? "http://localhost:8080";
 
+const parsedEpoch = parseInt(process.env.AUTH_TOKEN_EPOCH ?? "", 10);
+const tokenEpoch = Number.isNaN(parsedEpoch) || parsedEpoch < 0 ? 0 : parsedEpoch;
+
 function assertConfig(): void {
   if (isBuildPhase) return;
 
@@ -75,6 +78,7 @@ export const config = {
   cookieDomain: computeCookieDomain(authDomain),
   pinLength: password.length,
   sessionTtlSeconds: SESSION_TTL_SECONDS,
+  tokenEpoch,
   // Always mark the cookie Secure in production, and whenever the auth domain
   // is served over https. Never fall back to an insecure cookie in prod.
   isSecure: authDomain.startsWith("https:") || process.env.NODE_ENV === "production",

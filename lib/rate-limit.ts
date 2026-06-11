@@ -9,6 +9,14 @@ const MAX_ATTEMPTS = 5;
 const LOCKOUT_MS = 15 * 60 * 1000;
 const MAX_ENTRIES = 10_000;
 
+// Global cap across ALL IPs to slow distributed brute force from many sources.
+const GLOBAL_WINDOW_MS = 15 * 60 * 1000;
+const GLOBAL_MAX_FAILURES = 100;
+const GLOBAL_LOCKOUT_MS = 5 * 60 * 1000;
+
+// Fixed delay applied on a failed attempt to cap guessing throughput.
+export const FAILURE_DELAY_MS = 400;
+
 interface Attempt {
   count: number;
   windowStart: number;
@@ -16,6 +24,12 @@ interface Attempt {
 }
 
 const attempts = new Map<string, Attempt>();
+
+const globalState = {
+  failures: 0,
+  windowStart: Date.now(),
+  lockedUntil: 0,
+};
 
 function prune(now: number): void {
   if (attempts.size < MAX_ENTRIES) return;
@@ -39,6 +53,15 @@ export interface RateLimitResult {
 
 export function checkRateLimit(ip: string): RateLimitResult {
   const now = Date.now();
+
+  if (globalState.lockedUntil > now) {
+    console.warn(`[login] global lockout active, rejecting attempt ip=${ip}`);
+    return {
+      allowed: false,
+      retryAfterSeconds: Math.ceil((globalState.lockedUntil - now) / 1000),
+    };
+  }
+
   const entry = attempts.get(ip);
   if (!entry) return { allowed: true, retryAfterSeconds: 0 };
 
@@ -69,6 +92,21 @@ export function recordFailure(ip: string): void {
     entry.lockedUntil = now + LOCKOUT_MS;
   }
   attempts.set(ip, entry);
+
+  if (now - globalState.windowStart > GLOBAL_WINDOW_MS) {
+    globalState.failures = 0;
+    globalState.windowStart = now;
+  }
+  globalState.failures += 1;
+  if (globalState.failures >= GLOBAL_MAX_FAILURES) {
+    globalState.lockedUntil = now + GLOBAL_LOCKOUT_MS;
+  }
+
+  console.warn(
+    `[login] failed attempt ip=${ip} ip_count=${entry.count} global=${globalState.failures}` +
+      (entry.lockedUntil > now ? " ip_locked" : "") +
+      (globalState.lockedUntil > now ? " global_locked" : ""),
+  );
 }
 
 export function recordSuccess(ip: string): void {

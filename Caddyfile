@@ -1,16 +1,39 @@
-app-test.zaitsv.dev {
+# Example Caddyfile. Replace example.com with your actual domain.
+
+# Security headers applied at the TLS edge.
+# Add to every site that should be protected or host the auth service.
+(security_headers) {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		X-Frame-Options "SAMEORIGIN"
+		-Server
+	}
+}
+
+# Forward-auth gate. Import in every site that requires authentication.
+(auth) {
 	forward_auth forward-auth:8080 {
 		uri /
 	}
-	respond "hello"
 }
-auth.zaitsv.dev {
+
+# The forward-auth service itself (the login page).
+auth.example.com {
+	import security_headers
 	reverse_proxy forward-auth:8080
 }
 
-webzaitsv.ru {
-	forward_auth forward-auth:8080 {
-		uri /
-	}
-	respond "hello webzaitsv.ru"
+# A protected service — requires login.
+app.example.com {
+	import security_headers
+	import auth
+	reverse_proxy your-app:3000
+}
+
+# An unprotected service — no import auth.
+public.example.com {
+	import security_headers
+	reverse_proxy your-public-app:3000
 }

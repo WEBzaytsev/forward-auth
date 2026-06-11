@@ -1,6 +1,6 @@
 services:
   forward-auth:
-    build: .
+    image: ghcr.io/webzaytsev/forward-auth:latest
     container_name: forward-auth
     restart: unless-stopped
     environment:
@@ -13,6 +13,14 @@ services:
     # the internal "proxy" network, never directly from the host/internet.
     networks:
       - proxy
+    # Runtime hardening.
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 256m
+    pids_limit: 256
 
 networks:
   proxy:

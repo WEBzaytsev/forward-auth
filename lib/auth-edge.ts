@@ -4,7 +4,7 @@
  */
 
 import { config } from "./config";
-import { isExpired, parsePayloadString } from "./token";
+import { isBeforeEpoch, isExpired, parsePayloadString } from "./token";
 
 async function getKey(): Promise<CryptoKey> {
   const enc = new TextEncoder();
@@ -43,6 +43,7 @@ export async function verifyTokenEdge(token: string): Promise<boolean> {
   const parsed = parsePayloadString(payload);
   if (!parsed) return false;
   if (isExpired(parsed.issuedAt, config.sessionTtlSeconds)) return false;
+  if (isBeforeEpoch(parsed.issuedAt, config.tokenEpoch)) return false;
 
   try {
     const key = await getKey();
