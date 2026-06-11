@@ -1,23 +1,52 @@
 import { NextRequest, NextResponse } from "next/server";
-import { signToken } from "@/lib/auth";
+import { signToken, verifyPassword } from "@/lib/auth";
 import { config } from "@/lib/config";
+import {
+  checkRateLimit,
+  FAILURE_DELAY_MS,
+  getClientIp,
+  getGlobalDelayMs,
+  recordFailure,
+  recordSuccess,
+} from "@/lib/rate-limit";
 import { isRedirectAllowed } from "@/lib/redirect";
 
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 export async function POST(req: NextRequest) {
+  const ip = getClientIp(req.headers);
+
+  const limit = checkRateLimit(ip);
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "Too many attempts" },
+      {
+        status: 429,
+        headers: { "Retry-After": String(limit.retryAfterSeconds) },
+      },
+    );
+  }
+
   let pin: string;
   let redirectURL: string;
 
   try {
-    const body = await req.json() as { pin?: string; redirect?: string };
+    const body = (await req.json()) as { pin?: string; redirect?: string };
     pin = body.pin ?? "";
     redirectURL = body.redirect ?? "";
   } catch {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
 
-  if (pin !== config.password) {
+  if (!verifyPassword(pin)) {
+    recordFailure(ip);
+    // Base delay + progressive global penalty (grows with distributed attacks,
+    // capped at GLOBAL_DELAY_MAX_MS). Correct PIN skips this branch entirely.
+    await delay(FAILURE_DELAY_MS + getGlobalDelayMs());
     return NextResponse.json({ error: "Invalid password" }, { status: 401 });
   }
+
+  recordSuccess(ip);
 
   const token = signToken();
 
@@ -25,7 +54,7 @@ export async function POST(req: NextRequest) {
     name: "auth-token",
     value: token,
     path: "/",
-    maxAge: 86400 * 7,
+    maxAge: config.sessionTtlSeconds,
     httpOnly: true,
     secure: config.isSecure,
     sameSite: "lax",

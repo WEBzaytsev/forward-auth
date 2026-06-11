@@ -1,26 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyTokenEdge } from "./lib/auth-edge";
+import { config as authConfig } from "./lib/config";
+import { determineOriginalURL, isRedirectAllowed } from "./lib/redirect";
 
-const AUTH_DOMAIN = process.env.AUTH_DOMAIN ?? "http://localhost:8080";
-
-function determineOriginalURL(
-  forwardedProto: string | null,
-  forwardedHost: string | null,
-  forwardedUri: string | null,
-  queryRedirect: string | null,
-): string {
-  if (queryRedirect) return queryRedirect;
-
-  if (forwardedUri && forwardedProto && forwardedHost) {
-    return `${forwardedProto}://${forwardedHost}${forwardedUri}`;
-  }
-
-  try {
-    const parsed = new URL(AUTH_DOMAIN);
-    return `${parsed.protocol}//${parsed.host}/`;
-  } catch {
-    return "/";
-  }
+/**
+ * Builds a per-request Content-Security-Policy with a random nonce.
+ * Eliminates 'unsafe-inline' for scripts; style-src keeps 'unsafe-inline'
+ * because Tailwind/HeroUI inject critical CSS at runtime.
+ */
+function buildCsp(nonce: string): string {
+  const isDev = process.env.NODE_ENV === "development";
+  return [
+    "default-src 'self'",
+    // 'strict-dynamic' lets trusted nonce-bearing scripts load further scripts.
+    // 'unsafe-eval' is added in dev-only for source-map / HMR support.
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${isDev ? " 'unsafe-eval'" : ""}`,
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data:",
+    "font-src 'self'",
+    // ws:/wss: are needed in development for Next.js Hot Module Replacement.
+    `connect-src 'self'${isDev ? " ws: wss:" : ""}`,
+    "base-uri 'none'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+  ].join("; ");
 }
 
 export async function middleware(req: NextRequest) {
@@ -28,10 +31,7 @@ export async function middleware(req: NextRequest) {
   const forwardedProto = req.headers.get("x-forwarded-proto");
   const forwardedHost = req.headers.get("x-forwarded-host");
 
-  const token =
-    req.cookies.get("auth-token")?.value ??
-    req.headers.get("x-auth-token") ??
-    "";
+  const token = req.cookies.get("auth-token")?.value ?? "";
 
   const isValid = await verifyTokenEdge(token);
 
@@ -48,14 +48,28 @@ export async function middleware(req: NextRequest) {
       req.nextUrl.searchParams.get("redirect"),
     );
 
-    const loginURL = new URL("/", AUTH_DOMAIN);
-    loginURL.searchParams.set("redirect", originalURL);
+    const loginURL = new URL("/", authConfig.authDomain);
+    // Validate before reflecting: a tampered x-forwarded-host must not surface
+    // as an open redirect parameter even if /api/login would later reject it.
+    if (isRedirectAllowed(originalURL)) {
+      loginURL.searchParams.set("redirect", originalURL);
+    }
 
     return NextResponse.redirect(loginURL.toString(), { status: 302 });
   }
 
-  // Direct browser visit — let Next.js render the page
-  return NextResponse.next();
+  // Direct browser visit — inject a per-request nonce for CSP and render page.
+  const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
+  const csp = buildCsp(nonce);
+
+  // Pass nonce to server components via request header; Next.js reads x-nonce
+  // and applies it to the inline scripts it generates (RSC flight data, etc.).
+  const requestHeaders = new Headers(req.headers);
+  requestHeaders.set("x-nonce", nonce);
+
+  const res = NextResponse.next({ request: { headers: requestHeaders } });
+  res.headers.set("Content-Security-Policy", csp);
+  return res;
 }
 
 export const config = {

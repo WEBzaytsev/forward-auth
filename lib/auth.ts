@@ -1,16 +1,32 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { config } from "./config";
+import {
+  buildPayloadString,
+  isBeforeEpoch,
+  isExpired,
+  parsePayloadString,
+} from "./token";
 
-export function signToken(): string {
-  const timestamp = Math.floor(Date.now() / 1000).toString();
-  const data = Buffer.from(timestamp).toString("base64url");
-  const sig = createHmac("sha256", config.sessionSecret)
-    .update(timestamp)
+function sign(payload: string): string {
+  return createHmac("sha256", config.sessionSecret)
+    .update(payload)
     .digest("base64url");
-  return `${data}.${sig}`;
 }
 
-const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
+export function signToken(): string {
+  const issuedAt = Math.floor(Date.now() / 1000);
+  const nonce = randomBytes(12).toString("base64url");
+  const payload = buildPayloadString(issuedAt, nonce);
+  const data = Buffer.from(payload).toString("base64url");
+  return `${data}.${sign(payload)}`;
+}
+
+export function verifyPassword(pin: string): boolean {
+  const provided = Buffer.from(pin);
+  const expected = Buffer.from(config.password);
+  if (provided.length !== expected.length) return false;
+  return timingSafeEqual(provided, expected);
+}
 
 export function verifyToken(token: string): boolean {
   if (!token) return false;
@@ -20,20 +36,19 @@ export function verifyToken(token: string): boolean {
 
   const [dataPart, sigPart] = parts;
 
-  let timestamp: string;
+  let payload: string;
   try {
-    timestamp = Buffer.from(dataPart, "base64url").toString();
+    payload = Buffer.from(dataPart, "base64url").toString();
   } catch {
     return false;
   }
 
-  const issuedAt = parseInt(timestamp, 10);
-  if (isNaN(issuedAt)) return false;
-  if (Math.floor(Date.now() / 1000) - issuedAt > SESSION_TTL_SECONDS) return false;
+  const parsed = parsePayloadString(payload);
+  if (!parsed) return false;
+  if (isExpired(parsed.issuedAt, config.sessionTtlSeconds)) return false;
+  if (isBeforeEpoch(parsed.issuedAt, config.tokenEpoch)) return false;
 
-  const expectedSig = createHmac("sha256", config.sessionSecret)
-    .update(timestamp)
-    .digest("base64url");
+  const expectedSig = sign(payload);
 
   try {
     return timingSafeEqual(Buffer.from(sigPart), Buffer.from(expectedSig));

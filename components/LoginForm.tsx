@@ -51,6 +51,10 @@ export function LoginForm({ pinLength, redirectURL }: LoginFormProps) {
   );
 
   useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
     if (pin.length === pinLength) {
       void submit(pin);
     }
@@ -91,9 +95,15 @@ export function LoginForm({ pinLength, redirectURL }: LoginFormProps) {
     return "border-border bg-default";
   };
 
+  const cardMaxWidth =
+    pinLength <= 6 ? "max-w-sm" : pinLength <= 8 ? "max-w-md" : "max-w-lg";
+  const slotSize =
+    pinLength <= 5 ? "h-14 w-14" : pinLength <= 7 ? "h-12 w-12" : "h-10 w-10";
+  const gapSize = pinLength <= 5 ? "gap-3" : "gap-2";
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-sm">
+      <Card className={`w-full ${cardMaxWidth}`}>
         <Card.Content className="p-8">
           <div className="mb-8 text-center">
             <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-accent/10">
@@ -104,7 +114,7 @@ export function LoginForm({ pinLength, redirectURL }: LoginFormProps) {
           </div>
 
           <div
-            className={`flex cursor-pointer justify-center gap-3 ${isShaking ? "animate-shake" : ""}`}
+            className={`flex cursor-pointer justify-center ${gapSize} ${isShaking ? "animate-shake" : ""}`}
             onClick={() => inputRef.current?.focus()}
           >
             {Array.from({ length: pinLength }).map((_, index) => {
@@ -112,7 +122,7 @@ export function LoginForm({ pinLength, redirectURL }: LoginFormProps) {
               return (
                 <div
                   key={index}
-                  className={`flex h-14 w-14 items-center justify-center rounded-2xl border-2 transition-all ${getSlotClass(index)}`}
+                  className={`flex ${slotSize} items-center justify-center rounded-2xl border-2 transition-all ${getSlotClass(index)}`}
                 >
                   {pin[index] ? (
                     <div
