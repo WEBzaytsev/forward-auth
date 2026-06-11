@@ -4,11 +4,13 @@ services:
     container_name: forward-auth
     restart: unless-stopped
     environment:
-      AUTH_PASSWORD: "1234"
-      SESSION_SECRET: your-secret-key-32-bytes-minimum
-      AUTH_DOMAIN: http://auth.example.com
-    ports:
-      - "8080:8080"
+      # Set these in a local .env file (see .env.example). Never hard-code
+      # secrets here. Use a UNIQUE, random SESSION_SECRET per deployment.
+      AUTH_PASSWORD: ${AUTH_PASSWORD:?set AUTH_PASSWORD in .env}
+      SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET in .env}
+      AUTH_DOMAIN: ${AUTH_DOMAIN:?set AUTH_DOMAIN in .env}
+    # No host port mapping: the service must only be reachable by Caddy over
+    # the internal "proxy" network, never directly from the host/internet.
     networks:
       - proxy
 

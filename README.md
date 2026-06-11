@@ -11,7 +11,36 @@
 - Docker-образ: `ghcr.io/webzaytsev/forward-auth:latest`
 - Cookie на корневом домене — после входа на `auth.*` доступ открывается на всех поддоменах
 
+> Cookie выставляется на регистрируемый домен (для `auth.example.com` это
+> `.example.com`), поэтому одна авторизация открывает доступ ко **всем**
+> поддоменам. Это осознанный компромисс: не размещайте за этим контуром
+> приложения с XSS или недоверенный код — утечка cookie на любом поддомене
+> означает доступ ко всему контуру.
+
+## Безопасность (обязательно к прочтению)
+
+- **`SESSION_SECRET`** — случайные 32+ байта, **уникальные для каждого
+  деплоя**. Сгенерировать: `openssl rand -base64 48`. Сервис не запустится с
+  пустым, коротким или известным плейсхолдер-значением.
+- Подпись cookie зависит **только** от `SESSION_SECRET`. Ротация секрета
+  немедленно инвалидирует все выданные и любые поддельные токены. Смена одного
+  лишь `AUTH_PASSWORD` сессии не сбрасывает.
+- **`AUTH_PASSWORD`** — минимум 6 символов, не используйте тривиальные значения
+  (`1234`, `123456`). На `/api/login` включён rate-limit с блокировкой по IP.
+- Никогда не коммитьте секреты. Используйте `.env` (см. `.env.example`).
+- Не публикуйте порт сервиса на хост — он должен быть доступен только Caddy
+  через внутреннюю сеть `proxy`. Защищаемые backend-сервисы тоже не должны
+  слушать публичные порты в обход Caddy.
+
 ## Быстрый старт
+
+### .env
+
+```env
+AUTH_PASSWORD=<минимум 6 символов>
+SESSION_SECRET=<openssl rand -base64 48>
+AUTH_DOMAIN=https://auth.example.com
+```
 
 ### docker-compose.yml
 
@@ -22,9 +51,9 @@ services:
     container_name: forward-auth
     restart: unless-stopped
     environment:
-      AUTH_PASSWORD: "1234"
-      SESSION_SECRET: your-super-secret-key-32-bytes-long
-      AUTH_DOMAIN: https://auth.example.com
+      AUTH_PASSWORD: ${AUTH_PASSWORD:?set AUTH_PASSWORD in .env}
+      SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET in .env}
+      AUTH_DOMAIN: ${AUTH_DOMAIN:?set AUTH_DOMAIN in .env}
     networks:
       - proxy
 
@@ -33,7 +62,8 @@ networks:
     external: true
 ```
 
-`AUTH_DOMAIN` должен совпадать с доменом, на который проксируется сам сервис.
+`AUTH_DOMAIN` должен совпадать с доменом, на который проксируется сам сервис, и
+использовать `https` в проде, чтобы cookie передавалась только по TLS.
 
 ### Caddyfile
 
@@ -78,11 +108,11 @@ pnpm start
 
 ## Конфигурация
 
-| Переменная       | Описание                                              | По умолчанию                           |
-| ---------------- | ----------------------------------------------------- | -------------------------------------- |
-| `AUTH_PASSWORD`  | PIN-код, минимум 4 символа                            | `1234`                                 |
-| `SESSION_SECRET` | Ключ подписи cookie, минимум 32 байта                 | `secret-key-32-bytes-long-minimum`     |
-| `AUTH_DOMAIN`    | URL сервиса входа, например `https://auth.example.com` | `http://localhost:8080`              |
+| Переменная       | Описание                                                          | По умолчанию          |
+| ---------------- | ----------------------------------------------------------------- | --------------------- |
+| `AUTH_PASSWORD`  | PIN-код, минимум 6 символов, обязателен                           | — (нет, fail-closed)  |
+| `SESSION_SECRET` | Ключ подписи cookie, минимум 32 байта, уникальный, обязателен      | — (нет, fail-closed)  |
+| `AUTH_DOMAIN`    | URL сервиса входа, например `https://auth.example.com`            | `http://localhost:8080` |
 
 Cookie domain вычисляется из `AUTH_DOMAIN`: для `auth.example.com` будет `.example.com`.
 

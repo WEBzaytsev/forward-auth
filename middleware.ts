@@ -1,27 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyTokenEdge } from "./lib/auth-edge";
-
-const AUTH_DOMAIN = process.env.AUTH_DOMAIN ?? "http://localhost:8080";
-
-function determineOriginalURL(
-  forwardedProto: string | null,
-  forwardedHost: string | null,
-  forwardedUri: string | null,
-  queryRedirect: string | null,
-): string {
-  if (queryRedirect) return queryRedirect;
-
-  if (forwardedUri && forwardedProto && forwardedHost) {
-    return `${forwardedProto}://${forwardedHost}${forwardedUri}`;
-  }
-
-  try {
-    const parsed = new URL(AUTH_DOMAIN);
-    return `${parsed.protocol}//${parsed.host}/`;
-  } catch {
-    return "/";
-  }
-}
+import { config as authConfig } from "./lib/config";
+import { determineOriginalURL } from "./lib/redirect";
 
 export async function middleware(req: NextRequest) {
   const forwardedUri = req.headers.get("x-forwarded-uri");
@@ -48,7 +28,7 @@ export async function middleware(req: NextRequest) {
       req.nextUrl.searchParams.get("redirect"),
     );
 
-    const loginURL = new URL("/", AUTH_DOMAIN);
+    const loginURL = new URL("/", authConfig.authDomain);
     loginURL.searchParams.set("redirect", originalURL);
 
     return NextResponse.redirect(loginURL.toString(), { status: 302 });
