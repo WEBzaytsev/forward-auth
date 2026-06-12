@@ -90,6 +90,19 @@ git.example.com {
 }
 ```
 
+### Заполнить секреты в docker-compose.yml
+
+```bash
+# Сгенерировать SESSION_SECRET и вставить в файл
+sed -i "s|SESSION_SECRET: \"\"|SESSION_SECRET: \"$(openssl rand -base64 48)\"|" docker-compose.yaml
+
+# AUTH_PASSWORD — задать вручную (минимум 6 символов)
+sed -i 's|AUTH_PASSWORD: ""|AUTH_PASSWORD: "your-password-here"|' docker-compose.yml
+
+# AUTH_DOMAIN — заменить на свой домен
+sed -i 's|AUTH_DOMAIN: "https://auth.example.com"|AUTH_DOMAIN: "https://auth.yourdomain.com"|' docker-compose.yml
+```
+
 ### Запуск
 
 ```bash
