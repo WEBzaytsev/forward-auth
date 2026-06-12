@@ -129,6 +129,25 @@ pnpm start
 
 Cookie domain вычисляется из `AUTH_DOMAIN`: для `auth.example.com` будет `.example.com`.
 
+## Хостовая безопасность (чек-лист)
+
+Образ собран на distroless (нет shell/apt/setuid), запускается под non-root,
+с `cap_drop: ALL`, `no-new-privileges`, `read_only` и лимитами. Побег из такого
+контейнера упирается в хост и Docker-демон, поэтому проверьте на сервере:
+
+- **Никогда** не монтируйте `/var/run/docker.sock` в контейнеры — это прямой
+  путь к root на хосте. Проверьте все сервисы.
+- Включите **rootless Docker** или `userns-remap` в `/etc/docker/daemon.json` —
+  чтобы root внутри контейнера не совпадал с root на хосте.
+- `daemon.json`: `"no-new-privileges": true`, `"icc": false`,
+  `"live-restore": true`, лимиты логов (`max-size`/`max-file`).
+- Регулярно обновляйте **ядро хоста** и Docker Engine — реальные breakout-эксплойты
+  бьют по kernel/runc (класс CVE-2019-5736 и подобные).
+- Не запускайте контейнеры с `--privileged` и лишними `--cap-add`.
+- Сетевая сегментация: защищаемые сервисы — только во внутренних docker-сетях,
+  без публикации портов; снаружи доступ только через Caddy.
+- SSH: только по ключам (`PasswordAuthentication no`), root-login off, fail2ban.
+
 ## Участие в разработке
 
 Issues и PR приветствуются: [github.com/WEBzaytsev/forward-auth](https://github.com/WEBzaytsev/forward-auth).

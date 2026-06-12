@@ -1,5 +1,8 @@
 services:
   forward-auth:
+    # For an immutable deploy, pin by digest instead of :latest. Resolve with:
+    #   docker buildx imagetools inspect ghcr.io/webzaytsev/forward-auth:latest
+    # then use: ghcr.io/webzaytsev/forward-auth@sha256:<digest>
     image: ghcr.io/webzaytsev/forward-auth:latest
     container_name: forward-auth
     restart: unless-stopped
@@ -7,8 +10,12 @@ services:
       AUTH_PASSWORD: ""
       SESSION_SECRET: ""
       AUTH_DOMAIN: "https://auth.example.com"
+    # Only reachable by Caddy over the internal network. No `ports:` mapping,
+    # so the service is never exposed directly on the host/internet.
     networks:
       - caddy
+    # Runtime hardening. Do NOT add `seccomp:unconfined` or `cap_add` here —
+    # the default seccomp/AppArmor profiles must stay active.
     read_only: true
     security_opt:
       - no-new-privileges:true
