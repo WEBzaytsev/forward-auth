@@ -22,7 +22,19 @@
 # The forward-auth service itself (the login page).
 auth.example.com {
 	import security_headers
-	reverse_proxy forward-auth:8080
+
+	@login path /api/login
+	rate_limit @login {
+		zone login_per_ip {
+			key    {client_ip}
+			events 5
+			window 1m
+		}
+	}
+
+	reverse_proxy forward-auth:8080 {
+		header_up X-Real-IP {client_ip}
+	}
 }
 
 # A protected service — requires login.

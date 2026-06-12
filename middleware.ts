@@ -8,10 +8,7 @@ export async function middleware(req: NextRequest) {
   const forwardedProto = req.headers.get("x-forwarded-proto");
   const forwardedHost = req.headers.get("x-forwarded-host");
 
-  const token =
-    req.cookies.get("auth-token")?.value ??
-    req.headers.get("x-auth-token") ??
-    "";
+  const token = req.cookies.get("auth-token")?.value ?? "";
 
   const isValid = await verifyTokenEdge(token);
 
