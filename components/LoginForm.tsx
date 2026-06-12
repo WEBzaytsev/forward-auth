@@ -51,6 +51,10 @@ export function LoginForm({ pinLength, redirectURL }: LoginFormProps) {
   );
 
   useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
     if (pin.length === pinLength) {
       void submit(pin);
     }

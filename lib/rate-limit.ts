@@ -41,23 +41,11 @@ function prune(now: number): void {
 }
 
 export function getClientIp(headers: Headers): string {
-  // Trust only what the reverse proxy (Caddy) sets authoritatively.
-  // X-Real-IP is overwritten by Caddy with the real client_ip, so a
-  // client-supplied value cannot spoof it.
-  const realIp = headers.get("x-real-ip")?.trim();
-  if (realIp) return realIp;
-
-  // Fallback: the LAST X-Forwarded-For entry is the hop added by the nearest
-  // trusted proxy. The leftmost entry is client-controlled and must not be
-  // used as the rate-limit key.
-  const forwardedFor = headers.get("x-forwarded-for");
-  if (forwardedFor) {
-    const parts = forwardedFor.split(",");
-    const last = parts[parts.length - 1]!.trim();
-    if (last) return last;
-  }
-
-  return "unknown";
+  // Trusted only because Caddy overwrites X-Real-IP with the real client_ip.
+  // No fallback to X-Forwarded-For: it is client-spoofable without a trusted
+  // proxy. If X-Real-IP is absent (misconfig / direct access), fail safe to a
+  // single shared bucket rather than trusting a forgeable value.
+  return headers.get("x-real-ip")?.trim() || "unknown";
 }
 
 export interface RateLimitResult {
