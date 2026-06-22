@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyTokenEdge } from "./lib/auth-edge";
 import { config as authConfig } from "./lib/config";
+import { getClientIp } from "./lib/rate-limit";
 import { determineOriginalURL, isRedirectAllowed } from "./lib/redirect";
+import {
+  isBlockedUserAgent,
+  resolvePolicy,
+  truncateUserAgentForLog,
+} from "./lib/user-agent";
 
 /**
  * Builds a per-request Content-Security-Policy with a random nonce.
@@ -34,6 +40,21 @@ export async function middleware(req: NextRequest) {
   const token = req.cookies.get("auth-token")?.value ?? "";
 
   const isValid = await verifyTokenEdge(token);
+
+  if (!isValid) {
+    const policy = resolvePolicy({
+      pathname: req.nextUrl.pathname,
+      method: req.method,
+      isForwardAuth: forwardedUri !== null,
+    });
+    if (isBlockedUserAgent(req.headers.get("user-agent"), policy)) {
+      const ip = getClientIp(req.headers);
+      console.warn(
+        `[ua] blocked policy=${policy} ip=${ip} path=${req.nextUrl.pathname} ua=${truncateUserAgentForLog(req.headers.get("user-agent"))}`,
+      );
+      return new NextResponse(null, { status: 403 });
+    }
+  }
 
   // Forward-auth subrequest from Caddy
   if (forwardedUri !== null) {
