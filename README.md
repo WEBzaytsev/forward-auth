@@ -42,8 +42,8 @@ Cookie выставляется на регистрируемый домен (д
 - **`SESSION_SECRET`** — случайные 32+ байта, уникальные для каждого деплоя. Сгенерировать: `openssl rand -base64 48`. Сервис не стартует без ключа или с плейсхолдером.
 - Подпись cookie зависит **только** от `SESSION_SECRET`. Ротация секрета мгновенно инвалидирует все токены, включая поддельные. Смена `AUTH_PASSWORD` сессии **не сбрасывает**.
 - **`AUTH_TOKEN_EPOCH`** — аварийный рубильник. Установите в `date +%s`, чтобы мгновенно завершить все сессии без ротации секрета.
-- **`AUTH_PASSWORD`** — минимум 6 символов. На `/api/login`: per-IP rate-limit (5 попыток/мин в Caddy + 5/15 мин в Node), глобальный прогрессивный штраф (задержка растёт с числом глобальных неудач, потолок 5 с), базовая задержка 400 мс на неверную попытку. Верный код не задерживается.
-- IP для rate-limit берётся из `X-Real-IP`, который Caddy перезаписывает авторитетно. Клиент не может подменить ключ лимитирования.
+- **`AUTH_PASSWORD`** — минимум 6 символов. На `/api/login`: per-IP rate-limit в Caddy (5/мин + 15/10 мин) и в Node (5/15 мин с lockout), глобальный прогрессивный штраф (задержка растёт с числом глобальных неудач, потолок 5 с), базовая задержка 400 мс на неверную попытку. Верный код не задерживается.
+- IP для rate-limit: Caddy считает по `{client_ip}`, в Node — по `X-Real-IP`, который Caddy передаёт через `header_up`. За прокси (Cloudflare и т. п.) нужен `trusted_proxies`, иначе `{client_ip}` схлопнется в адрес edge-ноды. Подробнее — [Rate limit в Caddy](https://zaitsv.dev/blog/nastraivaem-rate-limit-v-caddy).
 - **Фильтр User-Agent** в middleware (три политики, без env): на `POST /api/login` блокируются пустой UA, CLI-инструменты, сканеры и headless-браузеры; на `forward_auth` без токена — CLI и сканеры (`403`, без redirect); на остальных маршрутах — только сканеры. Пустой UA на `GET /` разрешён (Docker HEALTHCHECK). С валидным `auth-token` UA не проверяется. Дополнительный слой, не замена rate-limit — UA легко подделать.
 - Токен читается только из cookie (`httpOnly`, `SameSite=Lax`, `Secure` в проде). Альтернативных каналов нет.
 - Образ на `gcr.io/distroless/nodejs20-debian12:nonroot`: нет shell, apt, setuid-бинарников. Контейнер: non-root (uid 65532), `cap_drop: ALL`, `no-new-privileges`, `read_only`.
@@ -103,58 +103,13 @@ image: ghcr.io/WEBzaytsev/forward-auth:latest
 
 Пример в репозитории: [`Caddyfile`](Caddyfile). Минимальная схема:
 
-```caddy
-# Заголовки безопасности — на все сайты.
-(security_headers) {
-    header {
-        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
-        X-Content-Type-Options "nosniff"
-        Referrer-Policy "no-referrer"
-        X-Frame-Options "DENY"
-        -Server
-    }
-}
+См. полный пример в [`Caddyfile`](Caddyfile). Ключевые моменты:
 
-# Проверка доступа — на каждый защищённый сайт.
-(auth) {
-    forward_auth forward-auth:8080 {
-        uri /
-    }
-}
-
-# Сервис входа (страница с кодом доступа).
-auth.example.com {
-    import security_headers
-
-    @login path /api/login
-    rate_limit @login {
-        zone login_per_ip {
-            key    {client_ip}
-            events 5
-            window 1m
-        }
-    }
-
-    reverse_proxy forward-auth:8080 {
-        header_up X-Real-IP {client_ip}
-    }
-}
-
-# Защищённый сервис.
-app.example.com {
-    import security_headers
-    import auth
-    reverse_proxy your-app:3000
-}
-
-# Открытый сервис — без import auth.
-public.example.com {
-    import security_headers
-    reverse_proxy your-public-app:3000
-}
-```
-
-`header_up X-Real-IP {client_ip}` обязателен — на нём держится per-IP rate-limit в Node. `{client_ip}` в Caddy — реальный TCP-пир, клиент его не может подделать.
+- глобально: `order rate_limit before basicauth` — лимит срабатывает до `forward_auth`;
+- имена зон **глобально уникальны** в процессе Caddy (префикс `auth_`, не `login_per_ip`);
+- логин: две зоны — бурст 5/мин и медленное окно 15/10 мин;
+- `header_up X-Real-IP {client_ip}` обязателен — на нём держится per-IP rate-limit в Node;
+- за Cloudflare — `trusted_proxies`, иначе `{client_ip}` = адрес edge, а не клиента.
 
 ## Конфигурация
 

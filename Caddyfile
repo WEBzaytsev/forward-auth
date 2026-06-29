@@ -1,5 +1,20 @@
 # Пример Caddyfile. Замените example.com на свой домен.
 
+# Глобальные настройки Caddy.
+{
+	# rate_limit до forward_auth / basicauth — иначе auth-сервис получит
+	# запросы раньше, чем лимит их отрежет.
+	order rate_limit before basicauth
+
+	# За Cloudflare или другим прокси перед Caddy — раскомментируйте и
+	# укажите IP прокси. Без этого {client_ip} = remote_ip (адрес edge, не клиента).
+	# Подробнее: https://zaitsv.dev/blog/nastraivaem-rate-limit-v-caddy
+	# servers {
+	# 	trusted_proxies static 203.0.113.0/24
+	# 	trusted_proxies_strict
+	# }
+}
+
 # Заголовки безопасности на TLS-границе.
 # Подключайте к каждому сайту — и к сервису входа, и к защищённым приложениям.
 (security_headers) {
@@ -9,6 +24,38 @@
 		Referrer-Policy "no-referrer"
 		X-Frame-Options "DENY"
 		-Server
+	}
+}
+
+# Универсальный лимит.
+# args[0] — имя зоны (глобально уникальное!), args[1] — событий в минуту.
+(rl) {
+	rate_limit {
+		log_key
+		zone {args[0]} {
+			key    {client_ip}
+			events {args[1]}
+			window 1m
+		}
+	}
+}
+
+# Защита логина: бурст 5/мин + медленный брутфорс 15/10мин.
+# args[0] — префикс имени зоны (уникальный на сайт; имена зон глобальны в процессе Caddy).
+(rl_login) {
+	@login path /api/login
+	rate_limit @login {
+		log_key
+		zone {args[0]}_login_burst {
+			key    {client_ip}
+			events 5
+			window 1m
+		}
+		zone {args[0]}_login_slow {
+			key    {client_ip}
+			events 15
+			window 10m
+		}
 	}
 }
 
@@ -22,15 +69,8 @@
 # Сервис входа — страница ввода кода доступа.
 auth.example.com {
 	import security_headers
-
-	@login path /api/login
-	rate_limit @login {
-		zone login_per_ip {
-			key    {client_ip}
-			events 5
-			window 1m
-		}
-	}
+	import rl auth_ui 120
+	import rl_login auth
 
 	reverse_proxy forward-auth:8080 {
 		header_up X-Real-IP {client_ip}
