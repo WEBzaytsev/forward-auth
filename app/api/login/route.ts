@@ -10,6 +10,7 @@ import {
   recordSuccess,
 } from "@/lib/rate-limit";
 import { isRedirectAllowed } from "@/lib/redirect";
+import { verifyTotp } from "@/lib/totp";
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -19,7 +20,7 @@ export async function POST(req: NextRequest) {
   const limit = checkRateLimit(ip);
   if (!limit.allowed) {
     return NextResponse.json(
-      { error: "Too many attempts" },
+      { error: "Слишком много попыток" },
       {
         status: 429,
         headers: { "Retry-After": String(limit.retryAfterSeconds) },
@@ -28,22 +29,35 @@ export async function POST(req: NextRequest) {
   }
 
   let pin: string;
+  let totp: string;
   let redirectURL: string;
 
   try {
-    const body = (await req.json()) as { pin?: string; redirect?: string };
+    const body = (await req.json()) as {
+      pin?: string;
+      totp?: string;
+      redirect?: string;
+    };
     pin = body.pin ?? "";
+    totp = body.totp ?? "";
     redirectURL = body.redirect ?? "";
   } catch {
-    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+    return NextResponse.json({ error: "Некорректный запрос" }, { status: 400 });
   }
 
   if (!verifyPassword(pin)) {
     recordFailure(ip);
-    // Base delay + progressive global penalty (grows with distributed attacks,
-    // capped at GLOBAL_DELAY_MAX_MS). Correct PIN skips this branch entirely.
     await delay(FAILURE_DELAY_MS + getGlobalDelayMs());
-    return NextResponse.json({ error: "Invalid password" }, { status: 401 });
+    return NextResponse.json({ error: "Неверный код доступа" }, { status: 401 });
+  }
+
+  if (config.totpEnabled && !verifyTotp(config.totpSecret, totp)) {
+    recordFailure(ip);
+    await delay(FAILURE_DELAY_MS + getGlobalDelayMs());
+    return NextResponse.json(
+      { error: "Неверный код подтверждения" },
+      { status: 401 },
+    );
   }
 
   recordSuccess(ip);

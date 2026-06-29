@@ -1,3 +1,5 @@
+import { isValidBase32Secret } from "./totp";
+
 const MIN_PASSWORD_LENGTH = 6;
 const MIN_SECRET_LENGTH = 32;
 const SESSION_TTL_SECONDS = 24 * 60 * 60;
@@ -25,30 +27,41 @@ const explicitCookieDomain = process.env.COOKIE_DOMAIN?.trim() ?? "";
 
 const parsedEpoch = parseInt(process.env.AUTH_TOKEN_EPOCH ?? "", 10);
 const tokenEpoch = Number.isNaN(parsedEpoch) || parsedEpoch < 0 ? 0 : parsedEpoch;
+const totpSecret = process.env.TOTP_SECRET?.trim() ?? "";
 
 function assertConfig(): void {
   if (isBuildPhase) return;
 
   if (!password) {
-    throw new Error("AUTH_PASSWORD is required and must be set via environment");
+    throw new Error(
+      "AUTH_PASSWORD обязателен: задайте код доступа через переменную окружения",
+    );
   }
   if (password.length < MIN_PASSWORD_LENGTH) {
     throw new Error(
-      `AUTH_PASSWORD must be at least ${MIN_PASSWORD_LENGTH} characters long`,
+      `AUTH_PASSWORD: код доступа должен быть не короче ${MIN_PASSWORD_LENGTH} символов`,
     );
   }
 
   if (!sessionSecret) {
-    throw new Error("SESSION_SECRET is required and must be set via environment");
+    throw new Error(
+      "SESSION_SECRET обязателен: задайте ключ подписи cookie через переменную окружения",
+    );
   }
   if (sessionSecret.length < MIN_SECRET_LENGTH) {
     throw new Error(
-      `SESSION_SECRET must be at least ${MIN_SECRET_LENGTH} bytes long`,
+      `SESSION_SECRET: ключ должен быть не короче ${MIN_SECRET_LENGTH} байт`,
     );
   }
   if (FORBIDDEN_SECRETS.has(sessionSecret)) {
     throw new Error(
-      "SESSION_SECRET is a known placeholder value; generate a unique random secret (openssl rand -base64 48)",
+      "SESSION_SECRET — известный плейсхолдер. Сгенерируйте уникальный ключ: openssl rand -base64 48",
+    );
+  }
+
+  if (totpSecret && !isValidBase32Secret(totpSecret)) {
+    throw new Error(
+      "TOTP_SECRET: недопустимый формат (ожидается base32, минимум 16 символов)",
     );
   }
 }
@@ -87,6 +100,8 @@ export const config = {
   pinLength: password.length,
   sessionTtlSeconds: SESSION_TTL_SECONDS,
   tokenEpoch,
+  totpSecret,
+  totpEnabled: totpSecret.length > 0,
   // Always mark the cookie Secure in production, and whenever the auth domain
   // is served over https. Never fall back to an insecure cookie in prod.
   isSecure: authDomain.startsWith("https:") || process.env.NODE_ENV === "production",

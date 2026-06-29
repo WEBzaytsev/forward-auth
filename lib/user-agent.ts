@@ -1,19 +1,3 @@
-export type UserAgentPolicy = "strict" | "default" | "minimal";
-
-const CLI_AND_SCRIPT_PATTERNS: RegExp[] = [
-  /curl\//i,
-  /Wget\//i,
-  /HTTPie\//i,
-  /Go-http-client/i,
-  /python-requests/i,
-  /aiohttp/i,
-  /urllib/i,
-  /libwww-perl/i,
-  /Java\//i,
-  /okhttp/i,
-  /axios\//i,
-];
-
 const SCANNER_PATTERNS: RegExp[] = [
   /sqlmap/i,
   /nikto/i,
@@ -32,56 +16,15 @@ const SCANNER_PATTERNS: RegExp[] = [
   /ZmEu/i,
 ];
 
-const HEADLESS_PATTERNS: RegExp[] = [
-  /HeadlessChrome/i,
-  /PhantomJS/i,
-  /Puppeteer/i,
-];
-
 function matchesAny(value: string, patterns: RegExp[]): boolean {
   return patterns.some((pattern) => pattern.test(value));
 }
 
-function isEmptyUserAgent(userAgent: string | null): boolean {
-  return (userAgent?.trim() ?? "") === "";
-}
-
-export function resolvePolicy(input: {
-  pathname: string;
-  method: string;
-  isForwardAuth: boolean;
-}): UserAgentPolicy {
-  if (input.method === "POST" && input.pathname === "/api/login") {
-    return "strict";
-  }
-  if (input.isForwardAuth) {
-    return "minimal";
-  }
-  return "default";
-}
-
-export function isBlockedUserAgent(
-  userAgent: string | null,
-  policy: UserAgentPolicy,
-): boolean {
+/** Blocks known scanner user-agents. Empty UA is allowed (Docker HEALTHCHECK). */
+export function isBlockedUserAgent(userAgent: string | null): boolean {
   const value = userAgent?.trim() ?? "";
-
-  if (policy === "strict") {
-    if (isEmptyUserAgent(userAgent)) return true;
-    if (matchesAny(value, CLI_AND_SCRIPT_PATTERNS)) return true;
-    if (matchesAny(value, SCANNER_PATTERNS)) return true;
-    if (matchesAny(value, HEADLESS_PATTERNS)) return true;
-    return false;
-  }
-
-  if (policy === "minimal") {
-    if (matchesAny(value, CLI_AND_SCRIPT_PATTERNS)) return true;
-    if (matchesAny(value, SCANNER_PATTERNS)) return true;
-    return false;
-  }
-
-  if (matchesAny(value, SCANNER_PATTERNS)) return true;
-  return false;
+  if (!value) return false;
+  return matchesAny(value, SCANNER_PATTERNS);
 }
 
 export function truncateUserAgentForLog(userAgent: string | null): string {

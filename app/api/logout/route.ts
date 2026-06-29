@@ -30,14 +30,14 @@ function isSameOrigin(req: NextRequest): boolean {
     }
   }
 
-  // Neither header is present — likely a non-browser client (curl, scripts).
-  // Allow to avoid breaking operational tooling.
-  return true;
+  // Neither header is present (non-browser client, curl, scripts).
+  // Deny by default — operational logout can be done by clearing the cookie directly.
+  return false;
 }
 
 export async function POST(req: NextRequest) {
   if (!isSameOrigin(req)) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return NextResponse.json({ error: "Доступ запрещён" }, { status: 403 });
   }
 
   const cookieOptions: Parameters<NextResponse["cookies"]["set"]>[0] = {

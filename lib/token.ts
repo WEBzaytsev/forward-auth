@@ -1,7 +1,6 @@
 /**
- * Runtime-agnostic token payload helpers shared by the Node (lib/auth.ts)
- * and Edge (lib/auth-edge.ts) verifiers. Contains no crypto or base64 so it
- * stays compatible with both the Node and Edge runtimes.
+ * Runtime-agnostic token payload helpers shared by Node verifiers.
+ * Contains no crypto or base64 so it stays compatible with both runtimes.
  *
  * Token wire format: `base64url(payload).base64url(hmac(payload))`
  * where payload = `${VERSION}.${issuedAt}.${nonce}`.

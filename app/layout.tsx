@@ -6,7 +6,8 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin", "cyrillic"] });
 
 export const metadata: Metadata = {
-  title: "Вход",
+  title: "Вход в сервис",
+  description: "Подтверждение доступа к защищённым сервисам",
 };
 
 export default async function RootLayout({
@@ -16,7 +17,7 @@ export default async function RootLayout({
 }) {
   // Reading x-nonce here causes Next.js to propagate the nonce to all inline
   // scripts it generates for this request (RSC flight data, hydration bootstrap).
-  // The nonce itself is set on the request headers by middleware.ts.
+  // The nonce itself is set on the request headers by proxy.ts.
   const nonce = (await headers()).get("x-nonce") ?? undefined;
 
   return (

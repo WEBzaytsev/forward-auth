@@ -18,7 +18,6 @@ const GLOBAL_WINDOW_MS = 15 * 60 * 1000;
 const GLOBAL_FAILURE_THRESHOLD = 50;
 const GLOBAL_DELAY_STEP_MS = 100;
 const GLOBAL_DELAY_MAX_MS = 5_000;
-const GLOBAL_MAX_FAILURES = 100; // still tracked for logging
 
 // Fixed delay applied on every failed attempt.
 export const FAILURE_DELAY_MS = 400;
@@ -112,9 +111,7 @@ export function recordFailure(ip: string): void {
   console.warn(
     `[login] failed attempt ip=${ip} ip_count=${entry.count} global=${globalState.failures}` +
       (entry.lockedUntil > now ? " ip_locked" : "") +
-      (globalState.failures >= GLOBAL_MAX_FAILURES
-        ? ` global_high global_extra_delay=${globalDelay}ms`
-        : ""),
+      (globalDelay > 0 ? ` global_extra_delay=${globalDelay}ms` : ""),
   );
 }
 

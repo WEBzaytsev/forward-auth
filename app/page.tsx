@@ -23,5 +23,5 @@ export default async function Home({
     return <AuthorizedView />;
   }
 
-  return <LoginForm pinLength={config.pinLength} redirectURL={redirectURL} />;
+  return <LoginForm pinLength={config.pinLength} redirectURL={redirectURL} totpEnabled={config.totpEnabled} />;
 }

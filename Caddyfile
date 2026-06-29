@@ -1,7 +1,22 @@
-# Example Caddyfile. Replace example.com with your actual domain.
+# Пример Caddyfile. Замените example.com на свой домен.
 
-# Security headers applied at the TLS edge.
-# Add to every site that should be protected or host the auth service.
+# Глобальные настройки Caddy.
+{
+	# rate_limit до forward_auth / basicauth — иначе auth-сервис получит
+	# запросы раньше, чем лимит их отрежет.
+	order rate_limit before basicauth
+
+	# За Cloudflare или другим прокси перед Caddy — раскомментируйте и
+	# укажите IP прокси. Без этого {client_ip} = remote_ip (адрес edge, не клиента).
+	# Подробнее: https://zaitsv.dev/blog/nastraivaem-rate-limit-v-caddy
+	# servers {
+	# 	trusted_proxies static 203.0.113.0/24
+	# 	trusted_proxies_strict
+	# }
+}
+
+# Заголовки безопасности на TLS-границе.
+# Подключайте к каждому сайту — и к сервису входа, и к защищённым приложениям.
 (security_headers) {
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
@@ -12,39 +27,64 @@
 	}
 }
 
-# Forward-auth gate. Import in every site that requires authentication.
+# Универсальный лимит.
+# args[0] — имя зоны (глобально уникальное!), args[1] — событий в минуту.
+(rl) {
+	rate_limit {
+		log_key
+		zone {args[0]} {
+			key    {client_ip}
+			events {args[1]}
+			window 1m
+		}
+	}
+}
+
+# Защита логина: бурст 5/мин + медленный брутфорс 15/10мин.
+# args[0] — префикс имени зоны (уникальный на сайт; имена зон глобальны в процессе Caddy).
+(rl_login) {
+	@login path /api/login
+	rate_limit @login {
+		log_key
+		zone {args[0]}_login_burst {
+			key    {client_ip}
+			events 5
+			window 1m
+		}
+		zone {args[0]}_login_slow {
+			key    {client_ip}
+			events 15
+			window 10m
+		}
+	}
+}
+
+# Проверка доступа через forward-auth. Импортируйте на каждый закрытый сайт.
 (auth) {
 	forward_auth forward-auth:8080 {
 		uri /
 	}
 }
 
-# The forward-auth service itself (the login page).
+# Сервис входа — страница ввода кода доступа.
 auth.example.com {
 	import security_headers
-
-	@login path /api/login
-	rate_limit @login {
-		zone login_per_ip {
-			key    {client_ip}
-			events 5
-			window 1m
-		}
-	}
+	import rl auth_ui 120
+	import rl_login auth
 
 	reverse_proxy forward-auth:8080 {
 		header_up X-Real-IP {client_ip}
 	}
 }
 
-# A protected service — requires login.
+# Защищённый сервис — без кода доступа не откроется.
 app.example.com {
 	import security_headers
 	import auth
 	reverse_proxy your-app:3000
 }
 
-# An unprotected service — no import auth.
+# Открытый сервис — без import auth.
 public.example.com {
 	import security_headers
 	reverse_proxy your-public-app:3000
