@@ -101,15 +101,34 @@ image: ghcr.io/WEBzaytsev/forward-auth:latest
 
 ### 3. Caddyfile
 
-Пример в репозитории: [`Caddyfile`](Caddyfile). Минимальная схема:
+Скопируйте [`Caddyfile`](Caddyfile) из репозитория — там сниппеты `(security_headers)`, `(rl)`, `(rl_login)`, `(auth)` и глобальный `order rate_limit before basicauth`. Замените `example.com` на свой домен.
 
-См. полный пример в [`Caddyfile`](Caddyfile). Ключевые моменты:
+Подключение forward-auth:
 
-- глобально: `order rate_limit before basicauth` — лимит срабатывает до `forward_auth`;
-- имена зон **глобально уникальны** в процессе Caddy (префикс `auth_`, не `login_per_ip`);
-- логин: две зоны — бурст 5/мин и медленное окно 15/10 мин;
-- `header_up X-Real-IP {client_ip}` обязателен — на нём держится per-IP rate-limit в Node;
-- за Cloudflare — `trusted_proxies`, иначе `{client_ip}` = адрес edge, а не клиента.
+```caddy
+(auth) {
+    forward_auth forward-auth:8080 {
+        uri /
+    }
+}
+
+auth.example.com {
+    import security_headers
+    import rl auth_ui 120
+    import rl_login auth
+    reverse_proxy forward-auth:8080 {
+        header_up X-Real-IP {client_ip}
+    }
+}
+
+app.example.com {
+    import security_headers
+    import auth
+    reverse_proxy your-app:3000
+}
+```
+
+`header_up X-Real-IP {client_ip}` обязателен — Node rate-limit читает IP только из этого заголовка. За Cloudflare раскомментируйте `trusted_proxies` в глобальном блоке [`Caddyfile`](Caddyfile), иначе `{client_ip}` будет адресом edge, а не клиента. Подробнее — [Rate limit в Caddy](https://zaitsv.dev/blog/nastraivaem-rate-limit-v-caddy).
 
 ## Конфигурация
 
