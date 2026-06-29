@@ -94,10 +94,10 @@ docker compose up -d --build
 Для готового образа из GHCR замените в `docker-compose.yaml` секцию `build:` на:
 
 ```yaml
-image: ghcr.io/<owner>/forward-auth:latest
+image: ghcr.io/WEBzaytsev/forward-auth:latest
 ```
 
-где `<owner>` — GitHub user или organization.
+Путь образа совпадает с репозиторием на GitHub (`ghcr.io/<владелец>/<имя-репо>`). После push в `main` CI публикует `:latest` автоматически.
 
 ### 3. Caddyfile
 
@@ -175,7 +175,7 @@ GitHub Actions (`.github/workflows/docker.yml`) при push в `main`:
 
 - сканирует исходники и `Dockerfile` (Trivy);
 - собирает multi-arch образ (`linux/amd64`, `linux/arm64`);
-- публикует в `ghcr.io/<owner>/forward-auth:latest`.
+- публикует в `ghcr.io/${{ github.repository }}:latest` (для этого репо — `ghcr.io/WEBzaytsev/forward-auth:latest`).
 
 Dependabot следит за npm, GitHub Actions и базовыми образами в `Dockerfile`.
 
