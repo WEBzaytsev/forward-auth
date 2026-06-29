@@ -30,25 +30,29 @@ function assertConfig(): void {
   if (isBuildPhase) return;
 
   if (!password) {
-    throw new Error("AUTH_PASSWORD is required and must be set via environment");
+    throw new Error(
+      "AUTH_PASSWORD обязателен: задайте код доступа через переменную окружения",
+    );
   }
   if (password.length < MIN_PASSWORD_LENGTH) {
     throw new Error(
-      `AUTH_PASSWORD must be at least ${MIN_PASSWORD_LENGTH} characters long`,
+      `AUTH_PASSWORD: код доступа должен быть не короче ${MIN_PASSWORD_LENGTH} символов`,
     );
   }
 
   if (!sessionSecret) {
-    throw new Error("SESSION_SECRET is required and must be set via environment");
+    throw new Error(
+      "SESSION_SECRET обязателен: задайте ключ подписи cookie через переменную окружения",
+    );
   }
   if (sessionSecret.length < MIN_SECRET_LENGTH) {
     throw new Error(
-      `SESSION_SECRET must be at least ${MIN_SECRET_LENGTH} bytes long`,
+      `SESSION_SECRET: ключ должен быть не короче ${MIN_SECRET_LENGTH} байт`,
     );
   }
   if (FORBIDDEN_SECRETS.has(sessionSecret)) {
     throw new Error(
-      "SESSION_SECRET is a known placeholder value; generate a unique random secret (openssl rand -base64 48)",
+      "SESSION_SECRET — известный плейсхолдер. Сгенерируйте уникальный ключ: openssl rand -base64 48",
     );
   }
 }

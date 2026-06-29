@@ -12,6 +12,7 @@ interface LoginFormProps {
 export function LoginForm({ pinLength, redirectURL }: LoginFormProps) {
   const [pin, setPin] = useState<string[]>([]);
   const [error, setError] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isShaking, setIsShaking] = useState(false);
   const [isPending, setIsPending] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -20,6 +21,7 @@ export function LoginForm({ pinLength, redirectURL }: LoginFormProps) {
     async (digits: string[]) => {
       if (isPending) return;
       setIsPending(true);
+      setErrorMessage(null);
 
       try {
         const res = await fetch("/api/login", {
@@ -28,13 +30,23 @@ export function LoginForm({ pinLength, redirectURL }: LoginFormProps) {
           body: JSON.stringify({ pin: digits.join(""), redirect: redirectURL }),
         });
 
-        if (res.ok) {
-          const data = (await res.json()) as { redirect: string };
+        const data = (await res.json()) as { redirect?: string; error?: string };
+
+        if (res.ok && data.redirect) {
           window.location.href = data.redirect;
           return;
         }
+
+        setErrorMessage(
+          data.error ??
+            (res.status === 429
+              ? "Слишком много попыток. Подождите минуту"
+              : "Неверный код. Проверьте ввод и попробуйте снова"),
+        );
       } catch {
-        // network error — fall through to shake
+        setErrorMessage(
+          "Не удалось связаться с сервером. Проверьте подключение к интернету",
+        );
       }
 
       setError(true);
@@ -64,8 +76,10 @@ export function LoginForm({ pinLength, redirectURL }: LoginFormProps) {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (isPending) return;
       if (e.key >= "0" && e.key <= "9") {
+        setErrorMessage(null);
         setPin((prev) => (prev.length < pinLength ? [...prev, e.key] : prev));
       } else if (e.key === "Backspace") {
+        setErrorMessage(null);
         setPin((prev) => prev.slice(0, -1));
       }
     };
@@ -109,8 +123,12 @@ export function LoginForm({ pinLength, redirectURL }: LoginFormProps) {
             <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-accent/10">
               <Lock className="h-8 w-8 text-accent" />
             </div>
-            <h1 className="mb-2 text-2xl font-bold text-foreground">Здравствуйте!</h1>
-            <p className="text-sm text-muted">Введите PIN-код</p>
+            <h1 className="mb-2 text-2xl font-bold text-foreground">
+              Подтвердите доступ
+            </h1>
+            <p className="text-sm text-muted">
+              Введите код доступа — после проверки откроется запрошенный сервис
+            </p>
           </div>
 
           <div
@@ -138,12 +156,24 @@ export function LoginForm({ pinLength, redirectURL }: LoginFormProps) {
             })}
           </div>
 
+          <div className="mt-4 min-h-10 text-center text-sm" aria-live="polite">
+            {isPending && !error && (
+              <p className="text-muted">Проверяем код…</p>
+            )}
+            {errorMessage && (
+              <p className="text-danger" role="alert">
+                {errorMessage}
+              </p>
+            )}
+          </div>
+
           <input
             ref={inputRef}
             type="text"
             inputMode="numeric"
             autoComplete="off"
             autoFocus
+            aria-label="Код доступа"
             className="sr-only"
             value=""
             onChange={() => {}}

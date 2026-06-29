@@ -26,15 +26,18 @@ export function AuthorizedView() {
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-success/10">
             <ShieldCheck className="h-8 w-8 text-success" />
           </div>
-          <h1 className="mb-2 text-2xl font-bold text-foreground">Авторизован</h1>
-          <p className="mb-6 text-sm text-muted">Вы успешно вошли в систему.</p>
+          <h1 className="mb-2 text-2xl font-bold text-foreground">Доступ открыт</h1>
+          <p className="mb-6 text-sm text-muted">
+            Сессия активна на этом устройстве. Защищённые сервисы открываются без
+            повторного ввода кода.
+          </p>
           <Button
             variant="outline"
             fullWidth
             isPending={isPending}
             onPress={handleLogout}
           >
-            {({ isPending: p }) => (p ? "Выход..." : "Выйти")}
+            {({ isPending: p }) => (p ? "Выход…" : "Выйти")}
           </Button>
         </Card.Content>
       </Card>

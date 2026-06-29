@@ -6,7 +6,8 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin", "cyrillic"] });
 
 export const metadata: Metadata = {
-  title: "Вход",
+  title: "Вход в сервис",
+  description: "Подтверждение доступа к защищённым сервисам",
 };
 
 export default async function RootLayout({

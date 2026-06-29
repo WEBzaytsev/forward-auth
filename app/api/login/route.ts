@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
   const limit = checkRateLimit(ip);
   if (!limit.allowed) {
     return NextResponse.json(
-      { error: "Too many attempts" },
+      { error: "Слишком много попыток" },
       {
         status: 429,
         headers: { "Retry-After": String(limit.retryAfterSeconds) },
@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
     pin = body.pin ?? "";
     redirectURL = body.redirect ?? "";
   } catch {
-    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+    return NextResponse.json({ error: "Некорректный запрос" }, { status: 400 });
   }
 
   if (!verifyPassword(pin)) {
@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
     // Base delay + progressive global penalty (grows with distributed attacks,
     // capped at GLOBAL_DELAY_MAX_MS). Correct PIN skips this branch entirely.
     await delay(FAILURE_DELAY_MS + getGlobalDelayMs());
-    return NextResponse.json({ error: "Invalid password" }, { status: 401 });
+    return NextResponse.json({ error: "Неверный код доступа" }, { status: 401 });
   }
 
   recordSuccess(ip);

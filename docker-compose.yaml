@@ -5,7 +5,7 @@ services:
     container_name: forward-auth
     restart: unless-stopped
     env_file:
-      - .env   # cp .env.example .env && chmod 600 .env, then fill in secrets
+      - .env   # cp .env.example .env && chmod 600 .env, затем заполнить секреты
     networks:
       - caddy
     read_only: true
@@ -15,10 +15,8 @@ services:
       - ALL
     mem_limit: 256m
     pids_limit: 256
-    # No `ports:` — forward-auth is reachable only inside the caddy network.
-    # Publishing a port would let clients reach the service directly, bypassing
-    # Caddy's rate-limiting and the authoritative X-Real-IP header that
-    # per-IP rate-limiting relies on.
+    # Без ports: — сервис доступен только внутри сети caddy.
+    # Публикация порта обходит Caddy, ломает X-Real-IP и per-IP rate-limit.
 
 networks:
   caddy:
