@@ -15,8 +15,8 @@ importers:
         specifier: 3.2.1
         version: 3.2.1(tailwind-merge@3.4.0)(tailwindcss@4.3.1)
       lucide-react:
-        specifier: 1.21.0
-        version: 1.21.0(react@19.2.7)
+        specifier: 1.23.0
+        version: 1.23.0(react@19.2.7)
       next:
         specifier: 16.2.9
         version: 16.2.9(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -495,6 +495,11 @@ packages:
     peerDependencies:
       react: ^16.8.0 || ^17.0.0-rc.1 || ^18.0.0 || ^19.0.0-rc.1
 
+  '@react-types/shared@3.36.0':
+    resolution: {integrity: sha512-DkP/H0C2YjjS7gZWKNqOmU8a16qHPjQNdzMwmTq9SzplM6Iw0kVMTZ0OIoe6FOgGqa+FwMsE2QbPjh/n3g/jXQ==}
+    peerDependencies:
+      react: ^16.8.0 || ^17.0.0-rc.1 || ^18.0.0 || ^19.0.0-rc.1
+
   '@scure/base@2.2.0':
     resolution: {integrity: sha512-b8XEupJibegiXV+tDUseI8oLQc8ei3d/4Jkb2RpbHh3MfE054ov3uIz2dhFkB3FI8iwYkEh0gGCApkrYggkPNg==}
 
@@ -746,8 +751,8 @@ packages:
     resolution: {integrity: sha512-lyuxPGr/Wfhrlem2CL/UcnUc1zcqKAImBDzukY7Y5F/yQiNdko6+fRLevlw1HgMySw7f611UIY408EtxRSoK3Q==}
     hasBin: true
 
-  lucide-react@1.21.0:
-    resolution: {integrity: sha512-reEZMXq8Qdd5jg5XYkQ5TR1fB/GiQ7ih4vcrthYDtgjSDwh0i6/YLiGjsWsIwgN49gpAnd4J2elSNzncMEEUUQ==}
+  lucide-react@1.23.0:
+    resolution: {integrity: sha512-38BpJcD0JhFosxHApP/BYsBetLpQFRoTRzEzstM/XCc3jsAG7wqaY1lgVwxiUe3xqYE+lNxo2PkCmYwXWrwwIw==}
     peerDependencies:
       react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
@@ -936,7 +941,7 @@ snapshots:
   '@adobe/react-spectrum@3.47.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
     dependencies:
       '@internationalized/date': 3.12.2
-      '@react-types/shared': 3.35.0(react@19.2.7)
+      '@react-types/shared': 3.36.0(react@19.2.7)
       '@spectrum-icons/ui': 3.7.1(@adobe/react-spectrum@3.47.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@spectrum-icons/workflow': 4.3.1(@adobe/react-spectrum@3.47.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@swc/helpers': 0.5.23
@@ -1355,6 +1360,10 @@ snapshots:
     dependencies:
       react: 19.2.7
 
+  '@react-types/shared@3.36.0(react@19.2.7)':
+    dependencies:
+      react: 19.2.7
+
   '@scure/base@2.2.0': {}
 
   '@spectrum-icons/ui@3.7.1(@adobe/react-spectrum@3.47.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
@@ -1579,7 +1588,7 @@ snapshots:
     dependencies:
       js-tokens: 4.0.0
 
-  lucide-react@1.21.0(react@19.2.7):
+  lucide-react@1.23.0(react@19.2.7):
     dependencies:
       react: 19.2.7
 
@@ -1647,7 +1656,7 @@ snapshots:
   react-aria-components@1.17.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7):
     dependencies:
       '@internationalized/date': 3.12.2
-      '@react-types/shared': 3.35.0(react@19.2.7)
+      '@react-types/shared': 3.36.0(react@19.2.7)
       '@swc/helpers': 0.5.23
       client-only: 0.0.1
       react: 19.2.7
@@ -1671,7 +1680,7 @@ snapshots:
       '@internationalized/date': 3.12.2
       '@internationalized/number': 3.6.7
       '@internationalized/string': 3.2.9
-      '@react-types/shared': 3.35.0(react@19.2.7)
+      '@react-types/shared': 3.36.0(react@19.2.7)
       '@swc/helpers': 0.5.23
       aria-hidden: 1.2.6
       clsx: 2.1.1
@@ -1706,7 +1715,7 @@ snapshots:
       '@internationalized/date': 3.12.2
       '@internationalized/number': 3.6.7
       '@internationalized/string': 3.2.9
-      '@react-types/shared': 3.35.0(react@19.2.7)
+      '@react-types/shared': 3.36.0(react@19.2.7)
       '@swc/helpers': 0.5.23
       react: 19.2.7
       use-sync-external-store: 1.6.0(react@19.2.7)
