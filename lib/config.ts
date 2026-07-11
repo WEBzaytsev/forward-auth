@@ -24,13 +24,88 @@ const authDomain = process.env.AUTH_DOMAIN ?? "http://localhost:8080";
 // such as example.co.uk where the two-label heuristic would produce co.uk
 // (a public suffix that browsers refuse). Provide without a leading dot.
 const explicitCookieDomain = process.env.COOKIE_DOMAIN?.trim() ?? "";
+const allowedRedirectHostsRaw = process.env.ALLOWED_REDIRECT_HOSTS ?? "";
 
 const parsedEpoch = parseInt(process.env.AUTH_TOKEN_EPOCH ?? "", 10);
 const tokenEpoch = Number.isNaN(parsedEpoch) || parsedEpoch < 0 ? 0 : parsedEpoch;
 const totpSecret = process.env.TOTP_SECRET?.trim() ?? "";
 
+const HOSTNAME_RE = /^(localhost|\d{1,3}(?:\.\d{1,3}){3}|[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*)$/;
+
+function normalizeHostname(value: string): string | null {
+  const trimmed = value.trim().toLowerCase().replace(/^\.+/, "");
+  if (!trimmed) return null;
+
+  let hostname: string;
+  try {
+    if (/^https?:\/\//i.test(trimmed)) {
+      hostname = new URL(trimmed).hostname.toLowerCase();
+    } else {
+      // Keep ALLOWED_REDIRECT_HOSTS boring: exact hostnames only, no paths,
+      // schemes other than http(s), credentials, ports, or wildcard suffixes.
+      if (trimmed.includes("/") || trimmed.includes("@") || trimmed.includes(":")) {
+        return null;
+      }
+      hostname = trimmed;
+    }
+  } catch {
+    return null;
+  }
+
+  if (!HOSTNAME_RE.test(hostname)) return null;
+  return hostname;
+}
+
+function getAuthHostname(domain: string): string {
+  try {
+    const parsed = new URL(domain);
+    return parsed.hostname.toLowerCase();
+  } catch {
+    return "localhost";
+  }
+}
+
+function parseAllowedRedirectHosts(raw: string, domain: string): string[] {
+  const hosts = new Set<string>([getAuthHostname(domain)]);
+
+  for (const item of raw.split(",")) {
+    const value = item.trim();
+    if (!value) continue;
+
+    const hostname = normalizeHostname(value);
+    if (!hostname) {
+      throw new Error(
+        `ALLOWED_REDIRECT_HOSTS: недопустимый хост "${value}". Укажите точные hostnames через запятую, например: app.example.com,admin.example.com`,
+      );
+    }
+    hosts.add(hostname);
+  }
+
+  return [...hosts];
+}
+
+const allowedRedirectHosts = parseAllowedRedirectHosts(
+  allowedRedirectHostsRaw,
+  authDomain,
+);
+
 function assertConfig(): void {
   if (isBuildPhase) return;
+
+  let authUrl: URL;
+  try {
+    authUrl = new URL(authDomain);
+  } catch {
+    throw new Error(
+      "AUTH_DOMAIN: укажите полный публичный URL сервиса входа, например https://auth.example.com",
+    );
+  }
+  if (authUrl.protocol !== "http:" && authUrl.protocol !== "https:") {
+    throw new Error("AUTH_DOMAIN: разрешены только http:// или https:// URL");
+  }
+  if (process.env.NODE_ENV === "production" && authUrl.protocol !== "https:") {
+    throw new Error("AUTH_DOMAIN: в production требуется https://, иначе Secure cookie не будет работать корректно");
+  }
 
   if (!password) {
     throw new Error(
@@ -97,6 +172,7 @@ export const config = {
   sessionSecret,
   authDomain,
   cookieDomain: computeCookieDomain(authDomain),
+  allowedRedirectHosts,
   pinLength: password.length,
   sessionTtlSeconds: SESSION_TTL_SECONDS,
   tokenEpoch,
