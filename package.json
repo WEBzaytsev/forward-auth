@@ -14,7 +14,7 @@
   "dependencies": {
     "@heroui/react": "3.2.1",
     "@heroui/styles": "3.2.1",
-    "lucide-react": "1.23.0",
+    "lucide-react": "1.24.0",
     "next": "16.2.10",
     "otplib": "^13.4.1",
     "react": "19.2.7",
@@ -22,7 +22,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.3.2",
-    "@types/node": "26.1.0",
+    "@types/node": "26.1.1",
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
     "postcss": "8.5.15",
