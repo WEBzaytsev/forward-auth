@@ -45,7 +45,7 @@ Cookie выставляется на регистрируемый домен (д
 - Подпись cookie зависит **только** от `SESSION_SECRET`. Ротация секрета мгновенно инвалидирует все токены, включая поддельные. Смена `AUTH_PASSWORD` сессии **не сбрасывает**.
 - **`AUTH_TOKEN_EPOCH`** — аварийный рубильник. Установите в `date +%s`, чтобы мгновенно завершить все сессии без ротации секрета. Это основной способ реагирования на компрометацию инфраструктуры.
 - Redirect после логина разрешается на **`COOKIE_DOMAIN`** и все его поддомены. Это совпадает с областью действия общей `httpOnly` cookie: для `auth.example.com` автоматически получается `example.com`, значит разрешён возврат на `app.example.com`, `admin.example.com` и другие сервисы этого контура.
-- **`ALLOWED_REDIRECT_HOSTS`** — дополнительный fallback для hostnames вне `COOKIE_DOMAIN` (`localhost`, отдельный служебный домен, миграционный домен). Обычно пустой.
+- **`ALLOWED_REDIRECT_HOSTS`** — дополнительный список точных hostnames, но он **не расширяет** `COOKIE_DOMAIN`. Хост вне cookie-контура (`example.ru` при `COOKIE_DOMAIN=example.com`) считается ошибкой конфигурации и не может стать redirect target. Обычно пустой.
 - **`TOTP_SECRET`** (опционально) — второй фактор при входе. Base32-секрет для приложения-аутентификатора (Google Authenticator, Aegis и т. п.). Если задан — после кода доступа требуется 6-значный TOTP. Защищает от кражи или фишинга кода доступа. Без секрета поведение как раньше — только код доступа.
 - **`AUTH_PASSWORD`** — минимум 6 символов. На `/api/login`: per-IP rate-limit в Caddy (5/мин + 15/10 мин) и в Node (5/15 мин с lockout), глобальный прогрессивный штраф (задержка растёт с числом глобальных неудач, потолок 5 с), базовая задержка 400 мс на неверную попытку. Верный код не задерживается.
 - IP для rate-limit: Caddy считает по `{client_ip}`, в Node — по `X-Real-IP`, который Caddy передаёт через `header_up`. За прокси (Cloudflare и т. п.) нужен `trusted_proxies`, иначе `{client_ip}` схлопнется в адрес edge-ноды. Подробнее — [Rate limit в Caddy](https://zaitsv.dev/blog/nastraivaem-rate-limit-v-caddy).
@@ -86,8 +86,8 @@ sed -i "s|^SESSION_SECRET=.*|SESSION_SECRET=$(openssl rand -base64 48)|" .env
 # AUTH_DOMAIN — ваш домен сервиса входа:
 #   nano .env   → AUTH_DOMAIN=https://auth.example.com
 
-# ALLOWED_REDIRECT_HOSTS — только если нужен возврат на host вне COOKIE_DOMAIN:
-#   nano .env   → ALLOWED_REDIRECT_HOSTS=localhost,auth-alt.example.net
+# ALLOWED_REDIRECT_HOSTS — обычно пустой; если задан, host должен быть внутри COOKIE_DOMAIN:
+#   nano .env   → ALLOWED_REDIRECT_HOSTS=admin.example.com
 ```
 
 > **Почему `.env`, а не `docker-compose.yaml`?**  
@@ -151,12 +151,13 @@ app.example.com {
 | `AUTH_PASSWORD` | Код доступа, минимум 6 символов, обязателен | — (fail-closed) |
 | `SESSION_SECRET` | Ключ подписи cookie, минимум 32 байта, уникальный, обязателен | — (fail-closed) |
 | `AUTH_DOMAIN` | URL сервиса входа, например `https://auth.example.com` | `http://localhost:8080` |
-| `ALLOWED_REDIRECT_HOSTS` | Дополнительные точные hostnames для возврата после логина вне `COOKIE_DOMAIN`. Через запятую, без wildcard | `AUTH_DOMAIN` host |
+| `ALLOWED_REDIRECT_HOSTS` | Дополнительные точные hostnames для возврата после логина. Не расширяет `COOKIE_DOMAIN`: внешние домены невалидны | `AUTH_DOMAIN` host |
 | `AUTH_TOKEN_EPOCH` | Unix-время (сек). Токены до этого момента отклоняются | `0` (отключено) |
 | `TOTP_SECRET` | Base32-секрет для второго фактора (TOTP). Пусто = выключен | — (выключено) |
 | `COOKIE_DOMAIN` | Явный домен cookie для многосоставных TLD (`example.co.uk`). Без ведущей точки | вычисляется из `AUTH_DOMAIN` |
 
 Домен cookie вычисляется из `AUTH_DOMAIN`: для `auth.example.com` → `example.com`. Redirect после логина использует этот домен как wildcard-контур (`example.com` и `*.example.com`).
+`ALLOWED_REDIRECT_HOSTS` не может вывести redirect за этот контур: `example.ru` при `COOKIE_DOMAIN=example.com` невалиден и не сработает.
 При многосоставных TLD (`.co.uk`, `.com.br` и т. п.) задайте `COOKIE_DOMAIN` явно, иначе эвристика вернёт публичный суффикс и браузеры откажутся устанавливать cookie.
 
 ### Включение TOTP

@@ -25,6 +25,7 @@ const authDomain = process.env.AUTH_DOMAIN ?? "http://localhost:8080";
 // (a public suffix that browsers refuse). Provide without a leading dot.
 const explicitCookieDomain = process.env.COOKIE_DOMAIN?.trim() ?? "";
 const allowedRedirectHostsRaw = process.env.ALLOWED_REDIRECT_HOSTS ?? "";
+const cookieDomain = computeCookieDomain(authDomain);
 
 const parsedEpoch = parseInt(process.env.AUTH_TOKEN_EPOCH ?? "", 10);
 const tokenEpoch = Number.isNaN(parsedEpoch) || parsedEpoch < 0 ? 0 : parsedEpoch;
@@ -65,7 +66,23 @@ function getAuthHostname(domain: string): string {
   }
 }
 
-function parseAllowedRedirectHosts(raw: string, domain: string): string[] {
+function isIpAddress(hostname: string): boolean {
+  return /^[\d.]+$/.test(hostname) || hostname.includes(":");
+}
+
+function isCoveredByCookieDomain(hostname: string, domain: string): boolean {
+  const normalized = hostname.trim().toLowerCase();
+  const normalizedDomain = domain.trim().toLowerCase().replace(/^\.+/, "");
+  if (!normalizedDomain) return false;
+
+  if (normalizedDomain === "localhost" || isIpAddress(normalizedDomain)) {
+    return normalized === normalizedDomain;
+  }
+
+  return normalized === normalizedDomain || normalized.endsWith(`.${normalizedDomain}`);
+}
+
+function parseAllowedRedirectHosts(raw: string, domain: string, cookieDomain: string): string[] {
   const hosts = new Set<string>([getAuthHostname(domain)]);
 
   for (const item of raw.split(",")) {
@@ -78,6 +95,11 @@ function parseAllowedRedirectHosts(raw: string, domain: string): string[] {
         `ALLOWED_REDIRECT_HOSTS: недопустимый хост "${value}". Укажите точные hostnames через запятую, например: app.example.com,admin.example.com`,
       );
     }
+    if (!isCoveredByCookieDomain(hostname, cookieDomain)) {
+      throw new Error(
+        `ALLOWED_REDIRECT_HOSTS: хост "${hostname}" вне COOKIE_DOMAIN "${cookieDomain}". Redirect не может выходить за cookie-domain`,
+      );
+    }
     hosts.add(hostname);
   }
 
@@ -87,6 +109,7 @@ function parseAllowedRedirectHosts(raw: string, domain: string): string[] {
 const allowedRedirectHosts = parseAllowedRedirectHosts(
   allowedRedirectHostsRaw,
   authDomain,
+  cookieDomain,
 );
 
 function assertConfig(): void {
@@ -171,7 +194,7 @@ export const config = {
   password,
   sessionSecret,
   authDomain,
-  cookieDomain: computeCookieDomain(authDomain),
+  cookieDomain,
   allowedRedirectHosts,
   pinLength: password.length,
   sessionTtlSeconds: SESSION_TTL_SECONDS,

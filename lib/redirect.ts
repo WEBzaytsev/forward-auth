@@ -27,7 +27,7 @@ function isCoveredByCookieDomain(hostname: string): boolean {
 
 function isAllowedRedirectFallback(hostname: string): boolean {
   const normalized = hostname.trim().toLowerCase();
-  return config.allowedRedirectHosts.includes(normalized);
+  return config.allowedRedirectHosts.includes(normalized) && isCoveredByCookieDomain(normalized);
 }
 
 export function isRedirectHostAllowed(hostname: string): boolean {
@@ -40,9 +40,9 @@ export function isRedirectAllowed(redirectURL: string): boolean {
   if (!value || value === "/") return true;
   if (hasControlChars(value)) return false;
 
-  // Absolute URL: only http(s). Host trust follows the cookie scope first:
-  // cookieDomain and all of its subdomains. ALLOWED_REDIRECT_HOSTS is only an
-  // additional fallback for local/dev or unusual hosts outside the cookie scope.
+  // Absolute URL: only http(s). Host trust can never exceed the cookie scope:
+  // cookieDomain and all of its subdomains. ALLOWED_REDIRECT_HOSTS is accepted
+  // only for exact hostnames that are still inside that same cookie scope.
   if (/^https?:\/\//i.test(value)) {
     let parsedAbs: URL;
     try {
