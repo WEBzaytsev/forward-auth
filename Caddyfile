@@ -67,8 +67,8 @@
 }
 
 # Сервис входа — страница ввода кода доступа.
-# В .env обязательно добавьте защищённые hostnames:
-# ALLOWED_REDIRECT_HOSTS=app.example.com,admin.example.com
+# Redirect после логина разрешается на COOKIE_DOMAIN и его поддомены.
+# ALLOWED_REDIRECT_HOSTS нужен только для дополнительных hostnames вне cookie-контура.
 auth.example.com {
 	import security_headers
 	import rl auth_ui 120

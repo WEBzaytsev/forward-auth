@@ -4,9 +4,35 @@ function hasControlChars(value: string): boolean {
   return /[\u0000-\u001f\u007f]/.test(value);
 }
 
-export function isRedirectHostAllowed(hostname: string): boolean {
+function normalizedCookieDomain(): string {
+  return config.cookieDomain.trim().toLowerCase().replace(/^\.+/, "");
+}
+
+function isIpAddress(hostname: string): boolean {
+  return /^[\d.]+$/.test(hostname) || hostname.includes(":");
+}
+
+function isCoveredByCookieDomain(hostname: string): boolean {
+  const normalized = hostname.trim().toLowerCase();
+  const cookieDomain = normalizedCookieDomain();
+  if (!cookieDomain) return false;
+
+  // For localhost/IP deployments the cookie domain is exact-host only.
+  if (cookieDomain === "localhost" || isIpAddress(cookieDomain)) {
+    return normalized === cookieDomain;
+  }
+
+  return normalized === cookieDomain || normalized.endsWith(`.${cookieDomain}`);
+}
+
+function isAllowedRedirectFallback(hostname: string): boolean {
   const normalized = hostname.trim().toLowerCase();
   return config.allowedRedirectHosts.includes(normalized);
+}
+
+export function isRedirectHostAllowed(hostname: string): boolean {
+  const normalized = hostname.trim().toLowerCase();
+  return isCoveredByCookieDomain(normalized) || isAllowedRedirectFallback(normalized);
 }
 
 export function isRedirectAllowed(redirectURL: string): boolean {
@@ -14,7 +40,9 @@ export function isRedirectAllowed(redirectURL: string): boolean {
   if (!value || value === "/") return true;
   if (hasControlChars(value)) return false;
 
-  // Absolute URL: only http(s), and only exact configured hostnames.
+  // Absolute URL: only http(s). Host trust follows the cookie scope first:
+  // cookieDomain and all of its subdomains. ALLOWED_REDIRECT_HOSTS is only an
+  // additional fallback for local/dev or unusual hosts outside the cookie scope.
   if (/^https?:\/\//i.test(value)) {
     let parsedAbs: URL;
     try {
