@@ -1,46 +1,54 @@
 import { config } from "./config";
 
+function hasControlChars(value: string): boolean {
+  return /[\u0000-\u001f\u007f]/.test(value);
+}
+
+export function isRedirectHostAllowed(hostname: string): boolean {
+  const normalized = hostname.trim().toLowerCase();
+  return config.allowedRedirectHosts.includes(normalized);
+}
+
 export function isRedirectAllowed(redirectURL: string): boolean {
-  if (!redirectURL || redirectURL === "/") return true;
+  const value = redirectURL.trim();
+  if (!value || value === "/") return true;
+  if (hasControlChars(value)) return false;
 
-  let parsed: URL;
-  try {
-    parsed = new URL(redirectURL, "http://placeholder");
-  } catch {
-    return false;
-  }
-
-  // Absolute URL: check scheme
-  if (redirectURL.startsWith("http://") || redirectURL.startsWith("https://")) {
-    const parsedAbs = new URL(redirectURL);
-    const redirectHost = parsedAbs.hostname.toLowerCase();
-
-    let authHost: string;
+  // Absolute URL: only http(s), and only exact configured hostnames.
+  if (/^https?:\/\//i.test(value)) {
+    let parsedAbs: URL;
     try {
-      authHost = new URL(config.authDomain).hostname.toLowerCase();
+      parsedAbs = new URL(value);
     } catch {
       return false;
     }
 
-    if (redirectHost === authHost) return true;
-
-    if (
-      config.cookieDomain &&
-      (redirectHost === config.cookieDomain ||
-        redirectHost.endsWith(`.${config.cookieDomain}`))
-    ) {
-      return true;
+    if (parsedAbs.protocol !== "http:" && parsedAbs.protocol !== "https:") {
+      return false;
     }
 
+    return isRedirectHostAllowed(parsedAbs.hostname);
+  }
+
+  // Reject protocol-relative URLs and non-http schemes such as javascript:.
+  if (/^[a-z][a-z\d+.-]*:/i.test(value)) return false;
+
+  // Relative path: allow only clean root-relative paths (not // or /\).
+  if (!value.startsWith("/")) return false;
+  if (value.length >= 2 && (value[1] === "/" || value[1] === "\\")) {
     return false;
   }
 
-  // Relative path: allow only clean relative paths (not // or /\)
-  const p = redirectURL;
-  if (!p.startsWith("/")) return false;
-  if (p.length >= 2 && (p[1] === "/" || p[1] === "\\")) return false;
-
   return true;
+}
+
+function authRoot(): string {
+  try {
+    const parsed = new URL(config.authDomain);
+    return `${parsed.protocol}//${parsed.host}/`;
+  } catch {
+    return "/";
+  }
 }
 
 export function determineOriginalURL(
@@ -50,25 +58,23 @@ export function determineOriginalURL(
   queryRedirect: string | null,
 ): string {
   if (queryRedirect && isRedirectAllowed(queryRedirect)) {
-    return queryRedirect;
+    return queryRedirect.trim();
   }
 
   if (forwardedUri) {
     if (forwardedProto && forwardedHost) {
-      return `${forwardedProto}://${forwardedHost}${forwardedUri}`;
+      const proto = forwardedProto.trim().toLowerCase();
+      const host = forwardedHost.trim().toLowerCase();
+      const uri = forwardedUri.startsWith("/") ? forwardedUri : `/${forwardedUri}`;
+      const candidate = `${proto}://${host}${uri}`;
+
+      if (isRedirectAllowed(candidate)) {
+        return candidate;
+      }
     }
-    try {
-      const parsed = new URL(config.authDomain);
-      return `${parsed.protocol}//${parsed.host}/`;
-    } catch {
-      return "/";
-    }
+
+    return authRoot();
   }
 
-  try {
-    const parsed = new URL(config.authDomain);
-    return `${parsed.protocol}//${parsed.host}/`;
-  } catch {
-    return "/";
-  }
+  return authRoot();
 }

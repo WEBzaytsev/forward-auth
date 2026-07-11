@@ -67,6 +67,8 @@
 }
 
 # Сервис входа — страница ввода кода доступа.
+# В .env обязательно добавьте защищённые hostnames:
+# ALLOWED_REDIRECT_HOSTS=app.example.com,admin.example.com
 auth.example.com {
 	import security_headers
 	import rl auth_ui 120
